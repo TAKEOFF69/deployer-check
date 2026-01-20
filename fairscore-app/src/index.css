@@ -1,0 +1,351 @@
+@import "tailwindcss";
+
+@theme {
+  /* Chaotic meme coin palette */
+  --color-bg-primary: #0a0a0a;
+  --color-bg-secondary: #111111;
+  --color-bg-tertiary: #1a1a1a;
+  --color-bg-elevated: #222222;
+  --color-bg-input: #181818;
+
+  /* Accent - hot pink/magenta chaos */
+  --color-accent: #ff2d92;
+  --color-accent-hover: #ff5aab;
+  --color-accent-dim: rgba(255, 45, 146, 0.15);
+  --color-accent-alt: #00ffaa;
+
+  /* Trust tier colors - more saturated */
+  --color-elite: #00ff6a;
+  --color-trusted: #00d4ff;
+  --color-neutral: #ffcc00;
+  --color-risky: #ff6b00;
+  --color-danger: #ff0040;
+
+  /* Text colors */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #888888;
+  --color-text-tertiary: #555555;
+
+  /* Borders */
+  --color-border: #2a2a2a;
+  --color-border-light: #1f1f1f;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: 'Geist Mono', 'SF Mono', monospace;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================
+   FUNKY ANIMATIONS
+   ============================================ */
+
+/* Wobble for emojis */
+@keyframes wobble {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+
+.animate-wobble {
+  animation: wobble 0.5s ease-in-out infinite;
+}
+
+/* Chaotic spin */
+@keyframes chaosSpin {
+  0% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(90deg) scale(1.1); }
+  50% { transform: rotate(180deg) scale(1); }
+  75% { transform: rotate(270deg) scale(0.9); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+.animate-chaos-spin {
+  animation: chaosSpin 2s ease-in-out infinite;
+}
+
+/* Bounce in */
+@keyframes bounceIn {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  70% { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-bounce-in {
+  animation: bounceIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+/* Shake for errors/bad */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: shake 0.6s ease-in-out;
+}
+
+/* Pulse glow */
+@keyframes pulseGlow {
+  0%, 100% { filter: drop-shadow(0 0 10px currentColor); opacity: 0.8; }
+  50% { filter: drop-shadow(0 0 30px currentColor); opacity: 1; }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 1.5s ease-in-out infinite;
+}
+
+/* Float */
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-8px) rotate(2deg); }
+  75% { transform: translateY(-4px) rotate(-2deg); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Glitch effect */
+@keyframes glitch {
+  0%, 100% { transform: translate(0); }
+  20% { transform: translate(-2px, 2px); }
+  40% { transform: translate(-2px, -2px); }
+  60% { transform: translate(2px, 2px); }
+  80% { transform: translate(2px, -2px); }
+}
+
+.animate-glitch {
+  animation: glitch 0.3s ease-in-out infinite;
+}
+
+/* Fade slide */
+@keyframes fadeSlideIn {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-slide-in {
+  animation: fadeSlideIn 0.4s ease-out forwards;
+}
+
+/* Scale pop */
+@keyframes scalePop {
+  0% { opacity: 0; transform: scale(0.8); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.animate-scale-pop {
+  animation: scalePop 0.3s ease-out forwards;
+}
+
+/* Score reveal with drama */
+@keyframes scoreReveal {
+  0% { opacity: 0; transform: scale(0) rotate(-180deg); }
+  60% { transform: scale(1.2) rotate(10deg); }
+  80% { transform: scale(0.95) rotate(-5deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+.animate-score-reveal {
+  animation: scoreReveal 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+/* Rainbow text */
+@keyframes rainbow {
+  0% { color: #ff0040; }
+  20% { color: #ff6b00; }
+  40% { color: #ffcc00; }
+  60% { color: #00ff6a; }
+  80% { color: #00d4ff; }
+  100% { color: #ff2d92; }
+}
+
+.animate-rainbow {
+  animation: rainbow 3s linear infinite;
+}
+
+/* Typing dots */
+@keyframes typingDots {
+  0%, 20% { content: '.'; }
+  40% { content: '..'; }
+  60%, 100% { content: '...'; }
+}
+
+.typing-dots::after {
+  content: '';
+  animation: typingDots 1.5s infinite;
+}
+
+/* ============================================
+   GLOW EFFECTS
+   ============================================ */
+
+.glow-elite { text-shadow: 0 0 20px rgba(0, 255, 106, 0.8), 0 0 40px rgba(0, 255, 106, 0.4); }
+.glow-trusted { text-shadow: 0 0 20px rgba(0, 212, 255, 0.8), 0 0 40px rgba(0, 212, 255, 0.4); }
+.glow-neutral { text-shadow: 0 0 20px rgba(255, 204, 0, 0.8), 0 0 40px rgba(255, 204, 0, 0.4); }
+.glow-risky { text-shadow: 0 0 20px rgba(255, 107, 0, 0.8), 0 0 40px rgba(255, 107, 0, 0.4); }
+.glow-danger { text-shadow: 0 0 20px rgba(255, 0, 64, 0.8), 0 0 40px rgba(255, 0, 64, 0.4); }
+
+.glow-pink { text-shadow: 0 0 20px rgba(255, 45, 146, 0.8), 0 0 40px rgba(255, 45, 146, 0.4); }
+
+/* ============================================
+   BACKGROUNDS
+   ============================================ */
+
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 45, 146, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 45, 146, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.bg-noise {
+  position: relative;
+}
+
+.bg-noise::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.03;
+  pointer-events: none;
+}
+
+/* ============================================
+   SCROLLBAR
+   ============================================ */
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--color-border); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }
+
+/* ============================================
+   INPUTS
+   ============================================ */
+
+.input-funky {
+  background: var(--color-bg-input);
+  border: 2px solid var(--color-border);
+  border-radius: 0;
+  padding: 16px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--color-text-primary);
+  width: 100%;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.input-funky::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.input-funky:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 20px rgba(255, 45, 146, 0.2);
+}
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+
+.btn-funky {
+  background: var(--color-accent);
+  color: black;
+  border: none;
+  border-radius: 0;
+  padding: 16px 32px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn-funky:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  transform: skewX(-2deg);
+  box-shadow: 0 0 30px rgba(255, 45, 146, 0.4);
+}
+
+.btn-funky:active:not(:disabled) {
+  transform: skewX(-2deg) scale(0.98);
+}
+
+.btn-funky:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ============================================
+   CARDS
+   ============================================ */
+
+.card-funky {
+  background: var(--color-bg-secondary);
+  border: 2px solid var(--color-border);
+  border-radius: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.card-funky::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-alt), var(--color-accent));
+}
+
+/* ============================================
+   DVD BOUNCE ANIMATION (Windows screensaver style)
+   ============================================ */
+
+@keyframes dvdBounce {
+  0% { transform: translate(0, 0); }
+  12.5% { transform: translate(12px, -8px); }
+  25% { transform: translate(24px, 0); }
+  37.5% { transform: translate(12px, 8px); }
+  50% { transform: translate(0, 0); }
+  62.5% { transform: translate(-12px, -8px); }
+  75% { transform: translate(-24px, 0); }
+  87.5% { transform: translate(-12px, 8px); }
+  100% { transform: translate(0, 0); }
+}
+
+.animate-dvd-bounce {
+  animation: dvdBounce 8s ease-in-out infinite;
+}
+
+/* ============================================
+   STAGGER
+   ============================================ */
+
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
