@@ -5,7 +5,16 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Exclude Vercel serverless functions from Vite processing
+  build: {
+    rollupOptions: {
+      external: [/^api\//]
+    }
+  },
   server: {
+    hmr: {
+      overlay: false
+    },
     proxy: {
       '/api/fairscale': {
         target: 'https://api.fairscale.xyz',
