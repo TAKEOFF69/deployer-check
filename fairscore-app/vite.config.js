@@ -11,7 +11,7 @@ export default defineConfig({
         target: 'https://api.fairscale.xyz',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/fairscale/, ''),
-      }
+      },
     }
   }
 })

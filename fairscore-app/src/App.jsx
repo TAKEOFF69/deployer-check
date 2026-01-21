@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { getFairScore, getTierFromScore } from './services/fairscale';
 import { getTokenReport } from './services/rugcheck';
 import { generateRoast } from './services/grok';
-import { getDeployerInfo } from './services/solscan';
+import { getDeployerInfo, findRealDeployer } from './services/solscan';
 import { getDeployerWalletInfo } from './services/birdeye';
 import { loadLeaderboard, saveToLeaderboard, clearLeaderboard, isValidSolanaAddress, cleanTwitterHandle } from './utils/storage';
+import { fetchRecentChecks, saveRecentCheck } from './services/recentChecks';
 
 // Custom emoji paths
 const EMOJIS = {
@@ -41,7 +42,14 @@ function App() {
   const [loadingEmoji, setLoadingEmoji] = useState(getRandomEmoji('check'));
 
   useEffect(() => {
-    setLeaderboard(loadLeaderboard());
+    // Load from server first, fallback to local storage
+    fetchRecentChecks().then(serverData => {
+      if (serverData && serverData.length > 0) {
+        setLeaderboard(serverData);
+      } else {
+        setLeaderboard(loadLeaderboard());
+      }
+    });
   }, []);
 
   // Cycle through check emojis during loading
@@ -74,12 +82,16 @@ function App() {
         return;
       }
 
-      const deployerWallet = tokenReport.creator;
-      if (!deployerWallet) {
+      const reportedCreator = tokenReport.creator;
+      if (!reportedCreator) {
         setError('no deployer found');
         setScreen('landing');
         return;
       }
+
+      // Find the real deployer (handles pump.fun tokens where creator is mint authority)
+      const deployerWallet = await findRealDeployer(tokenCA, reportedCreator);
+      console.log('Real deployer:', deployerWallet, '(reported:', reportedCreator, ')');
 
       const allCreatorTokens = tokenReport.creatorTokens || [];
       const tokensLaunched = allCreatorTokens.length + 1;
@@ -103,6 +115,28 @@ function App() {
 
       const totalHolders = tokenReport.totalHolders || null;
 
+      // Calculate deployer age from token creation dates (more accurate than RPC)
+      // Use the oldest token creation date from creatorTokens, or current token's detectedAt
+      let tokenBasedAge = null;
+      const allTokenDates = [];
+
+      // Add current token's creation date if available
+      if (tokenReport.detectedAt) {
+        allTokenDates.push(new Date(tokenReport.detectedAt).getTime());
+      }
+
+      // Add all creator tokens' creation dates
+      for (const t of allCreatorTokens) {
+        if (t.createdAt) {
+          allTokenDates.push(new Date(t.createdAt).getTime());
+        }
+      }
+
+      if (allTokenDates.length > 0) {
+        const oldestDate = Math.min(...allTokenDates);
+        tokenBasedAge = Math.floor((Date.now() - oldestDate) / (1000 * 60 * 60 * 24));
+      }
+
       // Fetch deployer info from multiple sources in parallel
       const [deployerInfo, walletInfo, fairScoreData] = await Promise.all([
         getDeployerInfo(deployerWallet),
@@ -110,8 +144,11 @@ function App() {
         getFairScore(deployerWallet, cleanedTwitter)
       ]);
 
-      const { deployerAge, fundedBy, fundingTx } = deployerInfo;
+      const { deployerAge: rpcDeployerAge, fundedBy, fundingTx } = deployerInfo;
       const { netWorth, solBalance, tokenCount } = walletInfo;
+
+      // Prefer token-based age (more accurate), fallback to RPC-based age
+      const deployerAge = tokenBasedAge ?? rpcDeployerAge;
       const score = fairScoreData?.score ?? 500;
       const tier = fairScoreData?.tier || getTierFromScore(score);
 
@@ -181,8 +218,21 @@ function App() {
         checkedAt: result.checkedAt
       };
 
+      // Save to local storage as fallback
       const updatedLeaderboard = saveToLeaderboard(leaderboardEntry);
       setLeaderboard(updatedLeaderboard);
+
+      // Also save to server for global visibility
+      saveRecentCheck(leaderboardEntry).then(serverEntry => {
+        if (serverEntry) {
+          // Refresh from server to get latest data
+          fetchRecentChecks().then(serverData => {
+            if (serverData && serverData.length > 0) {
+              setLeaderboard(serverData);
+            }
+          });
+        }
+      });
       setScreen('roast');
 
     } catch (err) {

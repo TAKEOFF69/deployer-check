@@ -2,11 +2,11 @@ const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 const GROK_API_KEY = import.meta.env.VITE_GROK_API_KEY;
 
 const fallbackRoasts = {
-  ELITE: "This wallet touches grass AND money.",
-  TRUSTED: "Probably won't rug you. Probably.",
-  NEUTRAL: "Mid wallet energy detected.",
-  RISKY: "Your funds are playing Russian roulette.",
-  DANGER: "Sir, this is a crime scene."
+  ELITE: "This dev actually ships instead of shitposting. Rare breed.",
+  TRUSTED: "Won't rug you... unless rent is due. Keep one eye open.",
+  NEUTRAL: "Aggressively mid. The human equivalent of a beige wall.",
+  RISKY: "Your funds are one bad day away from becoming a tax write-off.",
+  DANGER: "Congrats, you found a wallet that makes Nigerian princes look trustworthy."
 };
 
 export async function generateRoast(score, tier, deployerData = {}) {
@@ -29,14 +29,15 @@ export async function generateRoast(score, tier, deployerData = {}) {
         messages: [
           {
             role: 'system',
-            content: `You are a witty crypto degen roast master. Generate a single short sentence (max 15 words) about a Solana token deployer. Be funny, use crypto slang, and match the tone to the data:
-            - High FairScore (700+): Complimentary but still edgy
-            - Medium FairScore (400-699): Skeptical, backhanded compliments
-            - Low FairScore (0-399): Full roast mode, warn people
-            - Low rugcheck score: More sus vibes
-            - Many tokens launched: Either serial builder or serial rugger
-            - High top market cap: Has had success before
-            - New deployer (few days old): Fresh wallet, could be sus`
+            content: `You are a savage crypto roast master with zero filter. Generate a single short sentence (max 15 words) about a Solana token deployer. Be brutally honest, use crypto slang, roast hard but keep it funny. Match intensity to the data:
+            - High FairScore (700+): Backhanded compliments, acknowledge they're legit but still mock them
+            - Medium FairScore (400-699): Heavy skepticism, passive-aggressive warnings, trust issues
+            - Low FairScore (0-399): Absolutely destroy them, call them out, warn people aggressively
+            - Low rugcheck score: Maximum sus energy, call them a scammer
+            - Many tokens launched: Either a chad builder or a serial rugpuller preying on degens
+            - High top market cap: Had success but probably dumped on retail
+            - New deployer (few days old): Fresh wallet = fresh scam vibes, roast the burner energy
+            Be offensive but clever. No mercy. Make it hurt but make it funny.`
           },
           {
             role: 'user',

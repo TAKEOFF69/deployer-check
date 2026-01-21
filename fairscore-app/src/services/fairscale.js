@@ -52,9 +52,10 @@ export async function getFairScore(walletAddress, twitterHandle = null) {
     const scaledScore = Math.round((data.fairscore ?? 50) * 10);
 
     // Return the full response data with fairscore
+    // Note: We ignore the tier from API (silver/gold/etc) and calculate our own based on score
     return {
       score: scaledScore,
-      tier: data.tier?.toUpperCase() ?? getTierFromScore(scaledScore),
+      tier: getTierFromScore(scaledScore),
       fairscore_base: data.fairscore_base,
       social_score: data.social_score,
       badges: data.badges || [],
@@ -89,10 +90,10 @@ function getMockFairScore(walletAddress) {
 }
 
 export function getTierFromScore(score) {
-  if (score >= 900) return 'ELITE';
-  if (score >= 700) return 'TRUSTED';
-  if (score >= 500) return 'NEUTRAL';
-  if (score >= 300) return 'RISKY';
+  if (score >= 700) return 'UNICORN';
+  if (score >= 400) return 'KINDA OK';
+  if (score >= 350) return 'MEH';
+  if (score >= 200) return 'RISKY';
   return 'DANGER';
 }
 
