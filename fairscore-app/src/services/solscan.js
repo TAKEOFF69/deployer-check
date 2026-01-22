@@ -106,32 +106,40 @@ export async function findRealDeployer(tokenMint, reportedCreator) {
   // For pump.fun tokens (where creator is mint authority), find the real deployer
   console.log('Reported creator is mint authority, finding real deployer...');
 
-  // Try Helius first
-  if (HELIUS_ENHANCED_API) {
+  // Try Helius with sortOrder=asc to get oldest transaction first
+  if (HELIUS_API_KEY) {
     try {
-      // Use RPC to get the oldest signature first, then get details from Helius
-      const signatures = await rpcCall('getSignaturesForAddress', [tokenMint, { limit: 1000 }]);
-      if (signatures && signatures.length > 0) {
-        // Get the oldest signature (last in array, RPC returns newest first)
-        const oldestSig = signatures[signatures.length - 1];
-        console.log('Found oldest signature via RPC:', oldestSig.signature?.slice(0, 20), 'blockTime:', oldestSig.blockTime);
+      const heliusRpc = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
-        // Get transaction details from Helius
-        const url = `${HELIUS_ENHANCED_API}/transactions/?api-key=${HELIUS_API_KEY}`;
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transactions: [oldestSig.signature] })
-        });
-
-        if (response.ok) {
-          const txDetails = await response.json();
-          if (txDetails && txDetails.length > 0) {
-            const tx = txDetails[0];
-            if (tx.feePayer && !isKnownProgramOrAuthority(tx.feePayer)) {
-              console.log('Found real deployer via Helius:', tx.feePayer);
-              return tx.feePayer;
+      const response = await fetch(heliusRpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getTransactionsForAddress',
+          params: [
+            tokenMint,
+            {
+              transactionDetails: 'full',
+              sortOrder: 'asc',  // Oldest first!
+              limit: 1
             }
+          ]
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (!data.error && data.result && data.result.length > 0) {
+          const tx = data.result[0];
+          // Fee payer is first signer
+          const feePayer = tx.transaction?.message?.accountKeys?.[0];
+          const feePayerPubkey = typeof feePayer === 'string' ? feePayer : feePayer?.pubkey;
+
+          if (feePayerPubkey && !isKnownProgramOrAuthority(feePayerPubkey)) {
+            console.log('Found real deployer via Helius (oldest tx):', feePayerPubkey);
+            return feePayerPubkey;
           }
         }
       }
@@ -212,72 +220,106 @@ export async function getDeployerInfo(walletAddress) {
 }
 
 /**
- * Get deployer info using Helius Enhanced API
- * Uses RPC to find oldest signatures, then Helius for transaction details
+ * Get deployer info using Helius RPC
+ * Uses getTransactionsForAddress with sortOrder=asc to get oldest transactions first
  */
 async function getDeployerInfoViaHelius(walletAddress) {
   console.log('Fetching deployer info via Helius...');
 
-  // First, use RPC to get ALL signatures and find the oldest ones
-  const signatures = await rpcCall('getSignaturesForAddress', [walletAddress, { limit: 1000 }]);
+  // Use Helius RPC with sortOrder=asc to get oldest transactions first
+  const heliusRpc = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
-  if (!signatures || signatures.length === 0) {
-    console.log('No signatures found for wallet');
-    return { deployerAge: null, fundedBy: null, fundingTx: null };
-  }
-
-  console.log(`RPC returned ${signatures.length} signatures`);
-
-  // Signatures are returned newest first, so the last ones are oldest
-  // Get the oldest 20 signatures to check for funding
-  const oldestSigs = signatures.slice(-20).reverse(); // reverse to check oldest first
-  const oldestSig = signatures[signatures.length - 1];
-
-  // Calculate wallet age from oldest signature
-  let deployerAge = null;
-  if (oldestSig.blockTime) {
-    deployerAge = Math.floor((Date.now() / 1000 - oldestSig.blockTime) / (60 * 60 * 24));
-    console.log('Wallet age from oldest sig:', deployerAge, 'days, blockTime:', oldestSig.blockTime);
-  }
-
-  // Get transaction details from Helius for the oldest signatures
-  const sigList = oldestSigs.map(s => s.signature);
-  const url = `${HELIUS_ENHANCED_API}/transactions/?api-key=${HELIUS_API_KEY}`;
-  const response = await fetch(url, {
+  const response = await fetch(heliusRpc, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transactions: sigList })
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getTransactionsForAddress',
+      params: [
+        walletAddress,
+        {
+          transactionDetails: 'full',
+          sortOrder: 'asc',  // Oldest first!
+          limit: 20
+        }
+      ]
+    })
   });
 
   if (!response.ok) {
-    throw new Error(`Helius API returned ${response.status}`);
+    throw new Error(`Helius RPC returned ${response.status}`);
   }
 
-  const transactions = await response.json();
-  console.log(`Helius returned details for ${transactions.length} transactions`);
+  const data = await response.json();
 
-  // Sort by timestamp ascending (oldest first)
-  transactions.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+  if (data.error) {
+    throw new Error(data.error.message || 'Helius RPC error');
+  }
+
+  const transactions = data.result || [];
+  console.log(`Helius returned ${transactions.length} transactions (oldest first)`);
+
+  if (transactions.length === 0) {
+    return { deployerAge: null, fundedBy: null, fundingTx: null };
+  }
+
+  // First transaction is the oldest (wallet creation/first activity)
+  const oldestTx = transactions[0];
+
+  // Calculate wallet age
+  let deployerAge = null;
+  if (oldestTx.blockTime) {
+    deployerAge = Math.floor((Date.now() / 1000 - oldestTx.blockTime) / (60 * 60 * 24));
+    console.log('Wallet age:', deployerAge, 'days, blockTime:', oldestTx.blockTime);
+  }
 
   // Find the funding source - look for the FIRST incoming SOL transfer
   let fundedBy = null;
-  let fundingTx = oldestSig.signature;
+  let fundingTx = oldestTx.transaction?.signatures?.[0];
 
   for (const tx of transactions) {
-    if (tx.nativeTransfers) {
-      for (const transfer of tx.nativeTransfers) {
-        if (transfer.toUserAccount === walletAddress &&
-            transfer.fromUserAccount &&
-            transfer.fromUserAccount !== walletAddress &&
-            transfer.amount > 10000) {
-          fundedBy = transfer.fromUserAccount;
-          fundingTx = tx.signature;
-          console.log('Found funder:', fundedBy, 'tx:', tx.signature?.slice(0, 20));
-          break;
+    const sig = tx.transaction?.signatures?.[0];
+    const message = tx.transaction?.message;
+    const meta = tx.meta;
+
+    if (!message || !meta) continue;
+
+    // Get account keys
+    const accountKeys = message.accountKeys || [];
+
+    // Check for SOL transfer by looking at balance changes
+    // preBalances/postBalances are in same order as accountKeys
+    for (let i = 0; i < accountKeys.length; i++) {
+      const account = typeof accountKeys[i] === 'string' ? accountKeys[i] : accountKeys[i]?.pubkey;
+      if (account === walletAddress) {
+        const preBalance = meta.preBalances?.[i] || 0;
+        const postBalance = meta.postBalances?.[i] || 0;
+        const received = postBalance - preBalance;
+
+        // If this wallet received SOL, find who sent it
+        if (received > 10000) {
+          // Look for the sender (account that lost SOL)
+          for (let j = 0; j < accountKeys.length; j++) {
+            if (j === i) continue;
+            const sender = typeof accountKeys[j] === 'string' ? accountKeys[j] : accountKeys[j]?.pubkey;
+            const senderPre = meta.preBalances?.[j] || 0;
+            const senderPost = meta.postBalances?.[j] || 0;
+            const sent = senderPre - senderPost;
+
+            // Sender lost SOL and is not a program
+            if (sent > 10000 && sender && !isKnownProgramOrAuthority(sender)) {
+              fundedBy = sender;
+              fundingTx = sig;
+              console.log('Found funder:', fundedBy, 'amount:', received / 1e9, 'SOL');
+              break;
+            }
+          }
         }
+        break;
       }
-      if (fundedBy) break;
     }
+    if (fundedBy) break;
   }
 
   console.log('Deployer info from Helius:', { deployerAge, fundedBy, fundingTx });
