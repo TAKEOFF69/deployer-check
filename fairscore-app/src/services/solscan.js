@@ -180,13 +180,18 @@ export async function getDeployerInfo(walletAddress) {
   // Try Helius first (faster and more reliable)
   if (HELIUS_ENHANCED_API) {
     try {
+      console.log('Attempting Helius for deployer info...');
       const result = await getDeployerInfoViaHelius(walletAddress);
+      console.log('Helius result:', result);
       if (result.fundedBy || result.deployerAge) {
         return result;
       }
+      console.log('Helius returned empty, falling back to RPC');
     } catch (err) {
       console.warn('Helius failed, falling back to RPC:', err.message);
     }
+  } else {
+    console.log('HELIUS_ENHANCED_API not configured');
   }
 
   // Fallback to RPC
@@ -200,8 +205,8 @@ async function getDeployerInfoViaHelius(walletAddress) {
   console.log('Fetching deployer info via Helius...');
 
   // Fetch transactions (Helius returns newest first by default)
-  // Use high limit to ensure we get the oldest transactions for wallets with lots of activity
-  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=1000`;
+  // Helius max limit is 100 per request
+  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=100`;
 
   const response = await fetch(url);
   if (!response.ok) {
