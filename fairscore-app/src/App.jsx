@@ -149,6 +149,9 @@ function App() {
       ]);
 
       const { deployerAge: rpcDeployerAge, fundedBy, fundingTx } = deployerInfo;
+      console.log('=== FUNDER DEBUG ===');
+      console.log('deployerInfo received:', JSON.stringify(deployerInfo));
+      console.log('fundedBy extracted:', fundedBy);
       const { netWorth, solBalance, tokenCount } = walletInfo;
 
       // Now that we have fundedBy, fetch creator tokens from BOTH deployer AND funder
@@ -202,6 +205,8 @@ function App() {
       const tokenSymbol = tokenReport.tokenMeta?.symbol ||
         tokenReport.token_extensions?.tokenMetadata?.symbol || null;
 
+      console.log('=== SETTING RESULT ===');
+      console.log('fundedBy before result:', fundedBy);
       const result = {
         tokenAddress: tokenCA,
         deployerWallet,
