@@ -4,7 +4,7 @@ import { getTokenReport } from './services/rugcheck';
 import { generateRoast } from './services/grok';
 import { getDeployerInfo, findRealDeployer, getDeployerCreatedTokens } from './services/solscan';
 import { getDeployerWalletInfo } from './services/birdeye';
-import { loadLeaderboard, saveToLeaderboard, clearLeaderboard, isValidSolanaAddress, cleanTwitterHandle } from './utils/storage';
+import { loadLeaderboard, saveToLeaderboard, isValidSolanaAddress, cleanTwitterHandle } from './utils/storage';
 import { fetchRecentChecks, saveRecentCheck } from './services/recentChecks';
 
 // Custom emoji paths
@@ -271,11 +271,6 @@ function App() {
     }
   };
 
-  const handleClearLeaderboard = () => {
-    clearLeaderboard();
-    setLeaderboard([]);
-  };
-
   const handleBack = () => {
     setScreen('landing');
     setCurrentResult(null);
@@ -317,7 +312,6 @@ function App() {
           leaderboard={leaderboard}
           onBack={handleBack}
           onTokenClick={handleTokenClick}
-          onClearLeaderboard={handleClearLeaderboard}
         />
       )}
     </div>
@@ -514,7 +508,7 @@ function RoastScreen({ result, onFindOut }) {
 // ==============================================
 // RESULTS SCREEN
 // ==============================================
-function ResultsScreen({ result, leaderboard, onBack, onTokenClick, onClearLeaderboard }) {
+function ResultsScreen({ result, leaderboard, onBack, onTokenClick }) {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
       {/* Header */}
@@ -548,7 +542,6 @@ function ResultsScreen({ result, leaderboard, onBack, onTokenClick, onClearLeade
             <RecentChecks
               leaderboard={leaderboard}
               onTokenClick={onTokenClick}
-              onClear={onClearLeaderboard}
               currentToken={result.tokenAddress}
             />
           </div>
@@ -816,7 +809,7 @@ function CreatorTokensList({ tokens }) {
 // ==============================================
 // RECENT CHECKS
 // ==============================================
-function RecentChecks({ leaderboard, onTokenClick, onClear, currentToken }) {
+function RecentChecks({ leaderboard, onTokenClick, currentToken }) {
   const [copiedAddress, setCopiedAddress] = useState(null);
 
   const tierColor = {
@@ -843,18 +836,10 @@ function RecentChecks({ leaderboard, onTokenClick, onClear, currentToken }) {
 
   return (
     <div className="card-funky h-full flex flex-col">
-      <div className="px-[3%] py-[2.5%] border-b-2 border-[var(--color-border)] flex items-center justify-between">
+      <div className="px-[3%] py-[2.5%] border-b-2 border-[var(--color-border)]">
         <h2 className="font-bold text-[var(--color-text-primary)] uppercase tracking-wide">
           recent checks
         </h2>
-        {leaderboard.length > 0 && (
-          <button
-            onClick={onClear}
-            className="text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-danger)] transition-colors uppercase font-bold"
-          >
-            clear
-          </button>
-        )}
       </div>
 
       <div className="flex-1 overflow-auto">
