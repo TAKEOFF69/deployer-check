@@ -12,6 +12,8 @@ const fallbackRoasts = {
 };
 
 export async function generateRoast(score, tier, deployerData = {}) {
+  console.log('generateRoast called, API key exists:', !!GROQ_API_KEY, 'key length:', GROQ_API_KEY?.length || 0);
+
   if (!GROQ_API_KEY) {
     console.warn('Groq API key not configured, using fallback roast');
     return fallbackRoasts[tier] || fallbackRoasts.NEUTRAL;
@@ -63,9 +65,11 @@ One punchy line. Make it cheeky, not cringe.`
     }
 
     const data = await response.json();
-    return data.choices[0].message.content.replace(/^["']|["']$/g, '').trim();
+    const roast = data.choices[0].message.content.replace(/^["']|["']$/g, '').trim();
+    console.log('Groq roast generated:', roast);
+    return roast;
   } catch (error) {
-    console.error('Groq API error:', error);
+    console.error('Groq API failed:', error.message || error);
     return fallbackRoasts[tier] || fallbackRoasts.NEUTRAL;
   }
 }
