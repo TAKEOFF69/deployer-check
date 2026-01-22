@@ -4,11 +4,46 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 
 const fallbackRoasts = {
-  ELITE: "Like finding a parking spot in Manhattan. Suspicious but take it.",
-  TRUSTED: "Surprisingly not a disaster. Your standards are low but met.",
-  NEUTRAL: "Your grandma's meatloaf: nothing special but won't kill you.",
-  RISKY: "About as stable as my dad's marriage. Third one.",
-  DANGER: "This wallet makes Nigerian princes look like Warren Buffett."
+  ELITE: [
+    "Like finding a parking spot in Manhattan. Suspicious but take it.",
+    "This wallet is cleaner than your browser history. Somehow.",
+    "The crypto equivalent of someone who returns their shopping cart.",
+    "Either genuinely legit or playing 4D chess. Either way, respect.",
+    "Your mom would approve. That's either good or concerning."
+  ],
+  TRUSTED: [
+    "Surprisingly not a disaster. Your standards are low but met.",
+    "Like a Costco rotisserie chicken - reliable, no surprises.",
+    "The Honda Civic of deployers. Boring but probably won't explode.",
+    "Passed the vibe check but just barely.",
+    "Good enough for government work, as they say."
+  ],
+  NEUTRAL: [
+    "Your grandma's meatloaf: nothing special but won't kill you.",
+    "This wallet has the same energy as gas station sushi.",
+    "Could go either way, like your fantasy football picks.",
+    "The human equivalent of a participation trophy.",
+    "Mid. Just aggressively, unapologetically mid."
+  ],
+  RISKY: [
+    "About as stable as my dad's marriage. Third one.",
+    "This wallet gives off 'trust me bro' energy.",
+    "Red flags so bright they're visible from space.",
+    "Would not leave this wallet alone with your drink.",
+    "The crypto equivalent of a carnival goldfish."
+  ],
+  DANGER: [
+    "This wallet makes Nigerian princes look like Warren Buffett.",
+    "Run. Don't walk. Actually, maybe drive.",
+    "This deployer's risk level is 'hold my beer' personified.",
+    "More red flags than a Chinese parade.",
+    "If this wallet was a restaurant, it would have a C health rating."
+  ]
+};
+
+const getRandomFallback = (tier) => {
+  const roasts = fallbackRoasts[tier] || fallbackRoasts.NEUTRAL;
+  return roasts[Math.floor(Math.random() * roasts.length)];
 };
 
 export async function generateRoast(score, tier, deployerData = {}) {
@@ -16,7 +51,7 @@ export async function generateRoast(score, tier, deployerData = {}) {
 
   if (!GROQ_API_KEY) {
     console.warn('Groq API key not configured, using fallback roast');
-    return fallbackRoasts[tier] || fallbackRoasts.NEUTRAL;
+    return getRandomFallback(tier);
   }
 
   try {
@@ -70,7 +105,7 @@ One punchy line. Make it cheeky, not cringe.`
     return roast;
   } catch (error) {
     console.error('Groq API failed:', error.message || error);
-    return fallbackRoasts[tier] || fallbackRoasts.NEUTRAL;
+    return getRandomFallback(tier);
   }
 }
 
