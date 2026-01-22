@@ -99,14 +99,17 @@ export async function findRealDeployer(tokenMint, reportedCreator) {
   // Try Helius first (fast and reliable)
   if (HELIUS_ENHANCED_API) {
     try {
-      // Get the token's oldest transaction (creation tx)
-      const url = `${HELIUS_ENHANCED_API}/addresses/${tokenMint}/transactions?api-key=${HELIUS_API_KEY}&limit=1&sort-order=asc`;
+      // Get the token's transactions (Helius returns newest first by default)
+      const url = `${HELIUS_ENHANCED_API}/addresses/${tokenMint}/transactions?api-key=${HELIUS_API_KEY}&limit=50`;
       const response = await fetch(url);
 
       if (response.ok) {
-        const transactions = await response.json();
+        let transactions = await response.json();
         if (transactions && transactions.length > 0) {
+          // Sort by timestamp ascending to get oldest first
+          transactions = transactions.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
           const firstTx = transactions[0];
+          console.log('Oldest token tx timestamp:', firstTx.timestamp, 'feePayer:', firstTx.feePayer);
           // The feePayer of the first transaction is the real deployer
           if (firstTx.feePayer && !isKnownProgramOrAuthority(firstTx.feePayer)) {
             console.log('Found real deployer via Helius:', firstTx.feePayer);
@@ -196,16 +199,20 @@ export async function getDeployerInfo(walletAddress) {
 async function getDeployerInfoViaHelius(walletAddress) {
   console.log('Fetching deployer info via Helius...');
 
-  // Get oldest transactions first using sort-order=asc
-  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=20&sort-order=asc`;
+  // Fetch transactions (Helius returns newest first by default)
+  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=50`;
 
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Helius API returned ${response.status}`);
   }
 
-  const transactions = await response.json();
-  console.log(`Helius returned ${transactions.length} transactions (oldest first)`);
+  let transactions = await response.json();
+  console.log(`Helius returned ${transactions.length} transactions`);
+
+  // Sort by timestamp ascending (oldest first)
+  transactions = transactions.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+  console.log('Sorted oldest first, oldest timestamp:', transactions[0]?.timestamp);
 
   if (!transactions || transactions.length === 0) {
     return { deployerAge: null, fundedBy: null, fundingTx: null };
