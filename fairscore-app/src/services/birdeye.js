@@ -1,5 +1,6 @@
 const BIRDEYE_API_URL = 'https://public-api.birdeye.so';
 const BIRDEYE_API_KEY = import.meta.env.VITE_BIRDEYE_API_KEY;
+const HELIUS_API_KEY = import.meta.env.VITE_HELIUS_API_KEY;
 
 // Lamports per SOL
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -95,31 +96,107 @@ async function getSolPrice() {
 }
 
 /**
+ * Get token holdings value using Helius DAS API
+ * @param {string} walletAddress - The wallet address
+ * @returns {Promise<{tokenValue: number, tokenCount: number}>}
+ */
+async function getTokenHoldingsValue(walletAddress) {
+  if (!HELIUS_API_KEY) {
+    return { tokenValue: 0, tokenCount: 0 };
+  }
+
+  try {
+    const heliusRpc = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
+
+    // Get all fungible tokens owned by wallet
+    const response = await fetch(heliusRpc, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'searchAssets',
+        params: {
+          ownerAddress: walletAddress,
+          tokenType: 'fungible',
+          displayOptions: {
+            showNativeBalance: false
+          }
+        }
+      })
+    });
+
+    if (!response.ok) {
+      console.warn('Helius searchAssets failed:', response.status);
+      return { tokenValue: 0, tokenCount: 0 };
+    }
+
+    const data = await response.json();
+    const items = data.result?.items || [];
+
+    let totalTokenValue = 0;
+    let tokenCount = 0;
+
+    for (const token of items) {
+      // Get token balance and price info
+      const balance = token.token_info?.balance || 0;
+      const decimals = token.token_info?.decimals || 0;
+      const pricePerToken = token.token_info?.price_info?.price_per_token || 0;
+
+      if (balance > 0 && pricePerToken > 0) {
+        const tokenAmount = balance / Math.pow(10, decimals);
+        const value = tokenAmount * pricePerToken;
+        totalTokenValue += value;
+        tokenCount++;
+      }
+    }
+
+    console.log('Token holdings:', { tokenCount, totalTokenValue });
+    return { tokenValue: totalTokenValue, tokenCount };
+  } catch (error) {
+    console.error('getTokenHoldingsValue error:', error);
+    return { tokenValue: 0, tokenCount: 0 };
+  }
+}
+
+/**
  * Get wallet net worth and portfolio data
- * Uses free Solana RPC for balance + Birdeye for price
+ * Includes SOL balance + all token holdings
  * @param {string} walletAddress - The wallet address to check
  * @returns {Promise<{netWorth: number|null, solBalance: number|null, tokenCount: number|null}>}
  */
 export async function getWalletNetWorth(walletAddress) {
   try {
-    // Get SOL balance from RPC and price from Birdeye in parallel
-    const [solBalance, solPrice] = await Promise.all([
+    // Get SOL balance, SOL price, and token holdings in parallel
+    const [solBalance, solPrice, tokenData] = await Promise.all([
       getSolBalanceFromRPC(walletAddress),
-      getSolPrice()
+      getSolPrice(),
+      getTokenHoldingsValue(walletAddress)
     ]);
 
-    // Calculate net worth (SOL balance * SOL price)
+    // Calculate total net worth (SOL value + token holdings value)
     let netWorth = null;
+    let solValue = 0;
+
     if (solBalance !== null && solPrice !== null) {
-      netWorth = solBalance * solPrice;
+      solValue = solBalance * solPrice;
     }
 
-    console.log('Wallet net worth data:', { solBalance, solPrice, netWorth });
+    netWorth = solValue + (tokenData.tokenValue || 0);
+
+    console.log('Wallet net worth data:', {
+      solBalance,
+      solPrice,
+      solValue,
+      tokenValue: tokenData.tokenValue,
+      tokenCount: tokenData.tokenCount,
+      totalNetWorth: netWorth
+    });
 
     return {
       netWorth,
       solBalance,
-      tokenCount: null // We can't get token count without the paid API
+      tokenCount: tokenData.tokenCount || null
     };
   } catch (error) {
     console.error('getWalletNetWorth error:', error);
