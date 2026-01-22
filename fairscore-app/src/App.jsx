@@ -882,7 +882,7 @@ function RecentChecks({ leaderboard, onTokenClick, currentToken }) {
                   </span>
                 </div>
 
-                {/* Row 2: Contract (copyable) + Twitter (clickable) + Date */}
+                {/* Row 2: Contract (copyable) + Twitter (clickable) */}
                 <div className="flex items-center gap-4 text-xs">
                   {/* Contract Address - copyable */}
                   <button
@@ -908,11 +908,6 @@ function RecentChecks({ leaderboard, onTokenClick, currentToken }) {
                       @{entry.twitterHandle}
                     </a>
                   )}
-
-                  {/* Date */}
-                  <span className="text-[var(--color-text-tertiary)] ml-auto">
-                    {new Date(entry.checkedAt).toLocaleDateString()}
-                  </span>
                 </div>
               </div>
             ))}

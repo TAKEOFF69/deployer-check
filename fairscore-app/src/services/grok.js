@@ -4,9 +4,9 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 
 const fallbackRoasts = {
-  UNICORN: "Like finding a parking spot in Manhattan. Suspicious but take it.",
-  'KINDA OK': "Your grandma's meatloaf: nothing special but won't kill you.",
-  MEH: "This wallet has the same energy as gas station sushi.",
+  ELITE: "Like finding a parking spot in Manhattan. Suspicious but take it.",
+  TRUSTED: "Surprisingly not a disaster. Your standards are low but met.",
+  NEUTRAL: "Your grandma's meatloaf: nothing special but won't kill you.",
   RISKY: "About as stable as my dad's marriage. Third one.",
   DANGER: "This wallet makes Nigerian princes look like Warren Buffett."
 };
