@@ -200,7 +200,8 @@ async function getDeployerInfoViaHelius(walletAddress) {
   console.log('Fetching deployer info via Helius...');
 
   // Fetch transactions (Helius returns newest first by default)
-  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=50`;
+  // Use high limit to ensure we get the oldest transactions for wallets with lots of activity
+  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=1000`;
 
   const response = await fetch(url);
   if (!response.ok) {
