@@ -192,87 +192,57 @@ export async function getDeployerInfo(walletAddress) {
 
 /**
  * Get deployer info using Helius Enhanced API
- * Now uses RPC to find the truly oldest transaction first
  */
 async function getDeployerInfoViaHelius(walletAddress) {
-  console.log('Fetching deployer info via RPC + Helius hybrid...');
+  console.log('Fetching deployer info via Helius...');
 
-  // Step 1: Use RPC to get ALL signatures and find the truly oldest one
-  let oldestSignature = null;
+  // Get oldest transactions first using sort-order=asc
+  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=20&sort-order=asc`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Helius API returned ${response.status}`);
+  }
+
+  const transactions = await response.json();
+  console.log(`Helius returned ${transactions.length} transactions (oldest first)`);
+
+  if (!transactions || transactions.length === 0) {
+    return { deployerAge: null, fundedBy: null, fundingTx: null };
+  }
+
+  // First transaction is the oldest (wallet creation/first funding)
+  const oldestTx = transactions[0];
+
+  // Calculate wallet age from oldest transaction
   let deployerAge = null;
-
-  try {
-    const signatures = await rpcCall('getSignaturesForAddress', [walletAddress, { limit: 1000 }]);
-    if (signatures && signatures.length > 0) {
-      // Last signature in the array is the oldest
-      const oldestSig = signatures[signatures.length - 1];
-      oldestSignature = oldestSig.signature;
-
-      if (oldestSig.blockTime) {
-        deployerAge = Math.floor((Date.now() - oldestSig.blockTime * 1000) / (1000 * 60 * 60 * 24));
-      }
-      console.log(`RPC found ${signatures.length} signatures, oldest:`, oldestSignature?.slice(0, 20));
-    }
-  } catch (err) {
-    console.warn('RPC signatures failed:', err.message);
+  if (oldestTx.timestamp) {
+    const ageInDays = Math.floor((Date.now() / 1000 - oldestTx.timestamp) / (60 * 60 * 24));
+    deployerAge = ageInDays;
   }
 
-  // Step 2: Use Helius to get transaction details for the oldest tx
+  // Find the funding source - look for the FIRST incoming SOL transfer
   let fundedBy = null;
-  let fundingTx = oldestSignature;
+  let fundingTx = oldestTx.signature;
 
-  if (oldestSignature) {
-    try {
-      // Get the oldest transaction details via Helius
-      const url = `${HELIUS_ENHANCED_API}/transactions?api-key=${HELIUS_API_KEY}`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactions: [oldestSignature] })
-      });
-
-      if (response.ok) {
-        const [tx] = await response.json();
-        if (tx && tx.nativeTransfers) {
-          for (const transfer of tx.nativeTransfers) {
-            if (transfer.toUserAccount === walletAddress &&
-                transfer.fromUserAccount &&
-                transfer.fromUserAccount !== walletAddress &&
-                transfer.amount > 10000) {
-              fundedBy = transfer.fromUserAccount;
-              console.log('Found funder from oldest tx:', fundedBy, 'amount:', transfer.amount);
-              break;
-            }
-          }
+  for (const tx of transactions) {
+    if (tx.nativeTransfers) {
+      for (const transfer of tx.nativeTransfers) {
+        if (transfer.toUserAccount === walletAddress &&
+            transfer.fromUserAccount &&
+            transfer.fromUserAccount !== walletAddress &&
+            transfer.amount > 10000) {
+          fundedBy = transfer.fromUserAccount;
+          fundingTx = tx.signature;
+          console.log('Found funder:', fundedBy, 'tx:', tx.signature?.slice(0, 20));
+          break;
         }
       }
-    } catch (err) {
-      console.warn('Helius tx details failed:', err.message);
+      if (fundedBy) break;
     }
   }
 
-  // Step 3: If Helius failed, fallback to RPC for transaction details
-  if (!fundedBy && oldestSignature) {
-    try {
-      const tx = await rpcCall('getTransaction', [oldestSignature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
-      if (tx) {
-        const instructions = tx.transaction?.message?.instructions || [];
-        for (const ix of instructions) {
-          if (ix.parsed?.type === 'transfer' && ix.program === 'system') {
-            if (ix.parsed.info?.destination === walletAddress) {
-              fundedBy = ix.parsed.info?.source;
-              console.log('Found funder via RPC fallback:', fundedBy);
-              break;
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('RPC tx details failed:', err.message);
-    }
-  }
-
-  console.log('Deployer info (hybrid):', { deployerAge, fundedBy, fundingTx });
+  console.log('Deployer info from Helius:', { deployerAge, fundedBy, fundingTx });
   return { deployerAge, fundedBy, fundingTx };
 }
 
