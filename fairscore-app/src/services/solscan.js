@@ -196,8 +196,8 @@ export async function getDeployerInfo(walletAddress) {
 async function getDeployerInfoViaHelius(walletAddress) {
   console.log('Fetching deployer info via Helius...');
 
-  // Fetch more transactions to ensure we get the oldest ones
-  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=100`;
+  // Get oldest transactions first - use both sort parameter and manual sort as backup
+  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=100&sortOrder=asc`;
 
   const response = await fetch(url);
   if (!response.ok) {
@@ -205,13 +205,13 @@ async function getDeployerInfoViaHelius(walletAddress) {
   }
 
   let transactions = await response.json();
-  console.log(`Helius returned ${transactions.length} transactions`);
+  console.log(`Helius returned ${transactions.length} transfer transactions`);
 
   if (!transactions || transactions.length === 0) {
     return { deployerAge: null, fundedBy: null, fundingTx: null };
   }
 
-  // Sort transactions by timestamp ascending (oldest first) - don't trust API sorting
+  // Sort by timestamp ascending (oldest first)
   transactions = transactions.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
   // First transaction after sorting is the oldest
