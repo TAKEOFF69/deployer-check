@@ -96,24 +96,42 @@ function isKnownProgramOrAuthority(pubkey) {
 export async function findRealDeployer(tokenMint, reportedCreator) {
   console.log('Finding real deployer for token:', tokenMint);
 
-  // Try Helius first (fast and reliable)
+  // If reported creator is a real wallet (not a known mint authority), trust it
+  // Rugcheck has better indexing for this than paginating through Helius
+  if (reportedCreator && !KNOWN_MINT_AUTHORITIES.includes(reportedCreator)) {
+    console.log('Using reported creator (not a mint authority):', reportedCreator);
+    return reportedCreator;
+  }
+
+  // For pump.fun tokens (where creator is mint authority), find the real deployer
+  console.log('Reported creator is mint authority, finding real deployer...');
+
+  // Try Helius first
   if (HELIUS_ENHANCED_API) {
     try {
-      // Get the token's transactions (Helius returns newest first by default)
-      const url = `${HELIUS_ENHANCED_API}/addresses/${tokenMint}/transactions?api-key=${HELIUS_API_KEY}&limit=50`;
-      const response = await fetch(url);
+      // Use RPC to get the oldest signature first, then get details from Helius
+      const signatures = await rpcCall('getSignaturesForAddress', [tokenMint, { limit: 1000 }]);
+      if (signatures && signatures.length > 0) {
+        // Get the oldest signature (last in array, RPC returns newest first)
+        const oldestSig = signatures[signatures.length - 1];
+        console.log('Found oldest signature via RPC:', oldestSig.signature?.slice(0, 20), 'blockTime:', oldestSig.blockTime);
 
-      if (response.ok) {
-        let transactions = await response.json();
-        if (transactions && transactions.length > 0) {
-          // Sort by timestamp ascending to get oldest first
-          transactions = transactions.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-          const firstTx = transactions[0];
-          console.log('Oldest token tx timestamp:', firstTx.timestamp, 'feePayer:', firstTx.feePayer);
-          // The feePayer of the first transaction is the real deployer
-          if (firstTx.feePayer && !isKnownProgramOrAuthority(firstTx.feePayer)) {
-            console.log('Found real deployer via Helius:', firstTx.feePayer);
-            return firstTx.feePayer;
+        // Get transaction details from Helius
+        const url = `${HELIUS_ENHANCED_API}/transactions/?api-key=${HELIUS_API_KEY}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactions: [oldestSig.signature] })
+        });
+
+        if (response.ok) {
+          const txDetails = await response.json();
+          if (txDetails && txDetails.length > 0) {
+            const tx = txDetails[0];
+            if (tx.feePayer && !isKnownProgramOrAuthority(tx.feePayer)) {
+              console.log('Found real deployer via Helius:', tx.feePayer);
+              return tx.feePayer;
+            }
           }
         }
       }
@@ -122,12 +140,7 @@ export async function findRealDeployer(tokenMint, reportedCreator) {
     }
   }
 
-  // Fallback: if not a known mint authority, use reported creator
-  if (!KNOWN_MINT_AUTHORITIES.includes(reportedCreator)) {
-    return reportedCreator;
-  }
-
-  // Last resort for pump.fun tokens: use RPC
+  // Fallback to RPC
   console.log('Falling back to RPC for deployer lookup...');
   return findRealDeployerViaRPC(tokenMint, reportedCreator);
 }
@@ -200,43 +213,55 @@ export async function getDeployerInfo(walletAddress) {
 
 /**
  * Get deployer info using Helius Enhanced API
+ * Uses RPC to find oldest signatures, then Helius for transaction details
  */
 async function getDeployerInfoViaHelius(walletAddress) {
   console.log('Fetching deployer info via Helius...');
 
-  // Fetch transactions (Helius returns newest first by default)
-  // Helius max limit is 100 per request
-  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=100`;
+  // First, use RPC to get ALL signatures and find the oldest ones
+  const signatures = await rpcCall('getSignaturesForAddress', [walletAddress, { limit: 1000 }]);
 
-  const response = await fetch(url);
+  if (!signatures || signatures.length === 0) {
+    console.log('No signatures found for wallet');
+    return { deployerAge: null, fundedBy: null, fundingTx: null };
+  }
+
+  console.log(`RPC returned ${signatures.length} signatures`);
+
+  // Signatures are returned newest first, so the last ones are oldest
+  // Get the oldest 20 signatures to check for funding
+  const oldestSigs = signatures.slice(-20).reverse(); // reverse to check oldest first
+  const oldestSig = signatures[signatures.length - 1];
+
+  // Calculate wallet age from oldest signature
+  let deployerAge = null;
+  if (oldestSig.blockTime) {
+    deployerAge = Math.floor((Date.now() / 1000 - oldestSig.blockTime) / (60 * 60 * 24));
+    console.log('Wallet age from oldest sig:', deployerAge, 'days, blockTime:', oldestSig.blockTime);
+  }
+
+  // Get transaction details from Helius for the oldest signatures
+  const sigList = oldestSigs.map(s => s.signature);
+  const url = `${HELIUS_ENHANCED_API}/transactions/?api-key=${HELIUS_API_KEY}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactions: sigList })
+  });
+
   if (!response.ok) {
     throw new Error(`Helius API returned ${response.status}`);
   }
 
-  let transactions = await response.json();
-  console.log(`Helius returned ${transactions.length} transactions`);
+  const transactions = await response.json();
+  console.log(`Helius returned details for ${transactions.length} transactions`);
 
   // Sort by timestamp ascending (oldest first)
-  transactions = transactions.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-  console.log('Sorted oldest first, oldest timestamp:', transactions[0]?.timestamp);
-
-  if (!transactions || transactions.length === 0) {
-    return { deployerAge: null, fundedBy: null, fundingTx: null };
-  }
-
-  // First transaction is the oldest (wallet creation/first funding)
-  const oldestTx = transactions[0];
-
-  // Calculate wallet age from oldest transaction
-  let deployerAge = null;
-  if (oldestTx.timestamp) {
-    const ageInDays = Math.floor((Date.now() / 1000 - oldestTx.timestamp) / (60 * 60 * 24));
-    deployerAge = ageInDays;
-  }
+  transactions.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
   // Find the funding source - look for the FIRST incoming SOL transfer
   let fundedBy = null;
-  let fundingTx = oldestTx.signature;
+  let fundingTx = oldestSig.signature;
 
   for (const tx of transactions) {
     if (tx.nativeTransfers) {
