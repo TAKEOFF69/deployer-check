@@ -196,23 +196,27 @@ export async function getDeployerInfo(walletAddress) {
 async function getDeployerInfoViaHelius(walletAddress) {
   console.log('Fetching deployer info via Helius...');
 
-  // Get oldest transactions first using sort-order=asc
-  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=20&sort-order=asc`;
+  // Fetch more transactions to ensure we get the oldest ones
+  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=100`;
 
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Helius API returned ${response.status}`);
   }
 
-  const transactions = await response.json();
-  console.log(`Helius returned ${transactions.length} oldest transactions`);
+  let transactions = await response.json();
+  console.log(`Helius returned ${transactions.length} transactions`);
 
   if (!transactions || transactions.length === 0) {
     return { deployerAge: null, fundedBy: null, fundingTx: null };
   }
 
-  // First transaction is the oldest (wallet creation/first funding)
+  // Sort transactions by timestamp ascending (oldest first) - don't trust API sorting
+  transactions = transactions.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+  // First transaction after sorting is the oldest
   const oldestTx = transactions[0];
+  console.log('Oldest tx timestamp:', oldestTx.timestamp, 'sig:', oldestTx.signature?.slice(0, 20));
 
   // Calculate wallet age from oldest transaction
   let deployerAge = null;
@@ -222,38 +226,26 @@ async function getDeployerInfoViaHelius(walletAddress) {
   }
 
   // Find the funding source - look for the FIRST incoming SOL transfer to this wallet
-  // We want the original funder, not necessarily the largest transfer
   let fundedBy = null;
   let fundingTx = oldestTx.signature;
 
-  // Transactions are already sorted ascending (oldest first)
-  // Find the first transaction with an incoming transfer
+  // Iterate through transactions in chronological order (oldest first)
   for (const tx of transactions) {
-    // Check nativeTransfers for incoming SOL to THIS wallet specifically
     if (tx.nativeTransfers) {
-      // Within the same transaction, take the largest transfer (to avoid dust)
-      let bestTransferInTx = null;
-      let largestInTx = 0;
-
+      // Find the first meaningful incoming transfer in this transaction
       for (const transfer of tx.nativeTransfers) {
         // Must be a transfer TO the deployer wallet from another wallet
         if (transfer.toUserAccount === walletAddress &&
             transfer.fromUserAccount &&
-            transfer.fromUserAccount !== walletAddress) {
-          if (transfer.amount > largestInTx) {
-            largestInTx = transfer.amount;
-            bestTransferInTx = transfer;
-          }
+            transfer.fromUserAccount !== walletAddress &&
+            transfer.amount > 10000) { // > 0.00001 SOL to skip dust
+          fundedBy = transfer.fromUserAccount;
+          fundingTx = tx.signature;
+          console.log('Found original funder via Helius:', fundedBy, 'amount:', transfer.amount, 'tx:', tx.signature?.slice(0, 20));
+          break;
         }
       }
-
-      // If we found an incoming transfer in this (oldest) transaction, use it
-      if (bestTransferInTx && largestInTx > 10000) { // > 0.00001 SOL to skip dust
-        fundedBy = bestTransferInTx.fromUserAccount;
-        fundingTx = tx.signature;
-        console.log('Found original funder via Helius:', fundedBy, 'amount:', largestInTx, 'tx:', tx.signature);
-        break; // Stop at the first transaction with meaningful incoming SOL
-      }
+      if (fundedBy) break; // Found the first funder, stop searching
     }
   }
 
