@@ -1,62 +1,71 @@
-const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
-const GROK_API_KEY = import.meta.env.VITE_GROK_API_KEY;
+// Using Groq's free API with Llama 3.1 (not Grok/X.AI)
+// Get your free API key at https://console.groq.com
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 
 const fallbackRoasts = {
-  ELITE: "This dev actually ships instead of shitposting. Rare breed.",
-  TRUSTED: "Won't rug you... unless rent is due. Keep one eye open.",
-  NEUTRAL: "Aggressively mid. The human equivalent of a beige wall.",
-  RISKY: "Your funds are one bad day away from becoming a tax write-off.",
-  DANGER: "Congrats, you found a wallet that makes Nigerian princes look trustworthy."
+  UNICORN: "Like finding a parking spot in Manhattan. Suspicious but take it.",
+  'KINDA OK': "Your grandma's meatloaf: nothing special but won't kill you.",
+  MEH: "This wallet has the same energy as gas station sushi.",
+  RISKY: "About as stable as my dad's marriage. Third one.",
+  DANGER: "This wallet makes Nigerian princes look like Warren Buffett."
 };
 
 export async function generateRoast(score, tier, deployerData = {}) {
-  if (!GROK_API_KEY) {
-    console.warn('Grok API key not configured, using fallback roast');
+  if (!GROQ_API_KEY) {
+    console.warn('Groq API key not configured, using fallback roast');
     return fallbackRoasts[tier] || fallbackRoasts.NEUTRAL;
   }
 
   try {
     const prompt = buildRoastPrompt(score, tier, deployerData);
 
-    const response = await fetch(GROK_API_URL, {
+    const response = await fetch(GROQ_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${GROK_API_KEY}`
+        'Authorization': `Bearer ${GROQ_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'grok-2-latest',
+        model: 'llama-3.3-70b-versatile',
         messages: [
           {
             role: 'system',
-            content: `You are a savage crypto roast master with zero filter. Generate a single short sentence (max 15 words) about a Solana token deployer. Be brutally honest, use crypto slang, roast hard but keep it funny. Match intensity to the data:
-            - High FairScore (700+): Backhanded compliments, acknowledge they're legit but still mock them
-            - Medium FairScore (400-699): Heavy skepticism, passive-aggressive warnings, trust issues
-            - Low FairScore (0-399): Absolutely destroy them, call them out, warn people aggressively
-            - Low rugcheck score: Maximum sus energy, call them a scammer
-            - Many tokens launched: Either a chad builder or a serial rugpuller preying on degens
-            - High top market cap: Had success but probably dumped on retail
-            - New deployer (few days old): Fresh wallet = fresh scam vibes, roast the burner energy
-            Be offensive but clever. No mercy. Make it hurt but make it funny.`
+            content: `Roast this deployer in ONE funny sentence (max 15 words).
+
+Style:
+- Use colorful comparisons to everyday things (Nigerian princes, gas station sushi, your ex, carnival games, etc)
+- ONE crypto term max. The rest should be normal words anyone understands.
+- Be actually funny, not "crypto twitter funny"
+- NO buzzword salads. NO forced slang stacking.
+
+Tone by score:
+- 700+: Backhanded compliment. "Like finding a unicorn. Probably fake but hey."
+- 400-699: Light mockery. "Has the same energy as a participation trophy."
+- Under 400: Savage warning with a joke. "Makes Nigerian princes look like Warren Buffett."
+
+One punchy line. Make it cheeky, not cringe.`
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        max_tokens: 50,
+        max_tokens: 40,
         temperature: 0.9
       })
     });
 
     if (!response.ok) {
-      throw new Error('Grok API error');
+      const errorText = await response.text();
+      console.error('Groq API error:', response.status, errorText);
+      throw new Error('Groq API error');
     }
 
     const data = await response.json();
-    return data.choices[0].message.content;
+    return data.choices[0].message.content.replace(/^["']|["']$/g, '').trim();
   } catch (error) {
-    console.error('Grok API error:', error);
+    console.error('Groq API error:', error);
     return fallbackRoasts[tier] || fallbackRoasts.NEUTRAL;
   }
 }
@@ -67,7 +76,9 @@ function buildRoastPrompt(score, tier, deployerData) {
     currentMarketCap = null,
     totalHolders = null,
     top10HeldPct = null,
-    risks = []
+    risks = [],
+    deployerAge = null,
+    rugcheckScore = null
   } = deployerData;
 
   const formatMcap = (val) => {
@@ -77,29 +88,38 @@ function buildRoastPrompt(score, tier, deployerData) {
     return `$${val.toFixed(0)}`;
   };
 
-  let prompt = `Token/Deployer stats: FairScore ${score}/1000 (${tier})`;
+  let prompt = `DEPLOYER DATA TO ROAST:\n`;
+  prompt += `- FairScore: ${score}/1000 (${tier} tier)\n`;
+
+  if (rugcheckScore !== null) {
+    prompt += `- Rugcheck score: ${rugcheckScore}/100 ${rugcheckScore < 50 ? '(SKETCHY AF)' : ''}\n`;
+  }
+
+  if (deployerAge !== null) {
+    prompt += `- Wallet age: ${deployerAge} days ${deployerAge < 7 ? '(FRESH BURNER ALERT)' : deployerAge < 30 ? '(sus timing)' : ''}\n`;
+  }
 
   if (tokensLaunched > 0) {
-    prompt += `, deployer has launched ${tokensLaunched} token${tokensLaunched > 1 ? 's' : ''}`;
+    prompt += `- Tokens launched: ${tokensLaunched} ${tokensLaunched > 5 ? '(serial deployer)' : ''}\n`;
   }
 
   if (currentMarketCap !== null) {
-    prompt += `, market cap: ${formatMcap(currentMarketCap)}`;
+    prompt += `- Current market cap: ${formatMcap(currentMarketCap)}\n`;
   }
 
   if (totalHolders !== null) {
-    prompt += `, ${totalHolders.toLocaleString()} holders`;
+    prompt += `- Holders: ${totalHolders.toLocaleString()}\n`;
   }
 
   if (top10HeldPct !== null) {
-    prompt += `, top 10 wallets hold ${top10HeldPct.toFixed(1)}% of supply`;
+    prompt += `- Top 10 wallets hold: ${top10HeldPct.toFixed(1)}% ${top10HeldPct > 50 ? '(concentrated = dump incoming)' : ''}\n`;
   }
 
   if (risks.length > 0) {
-    prompt += `, risks detected: ${risks.slice(0, 2).map(r => r.name || r.description).join(', ')}`;
+    prompt += `- Red flags: ${risks.slice(0, 3).map(r => r.name || r.description).join(', ')}\n`;
   }
 
-  prompt += `. Generate a one-liner roast/praise.`;
+  prompt += `\nRoast them with a funny comparison. Be clever, not try-hard.`;
   return prompt;
 }
 

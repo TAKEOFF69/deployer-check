@@ -1,8 +1,16 @@
-// Multiple RPC endpoints for reliability (browser-compatible, CORS-enabled, truly free)
+// Helius API key (free tier: 1M credits, 10 RPS) - get yours at https://helius.dev
+const HELIUS_API_KEY = import.meta.env.VITE_HELIUS_API_KEY;
+
+// Helius Enhanced API base URL (better than raw RPC for historical data)
+const HELIUS_ENHANCED_API = HELIUS_API_KEY
+  ? `https://api.helius.xyz/v0`
+  : null;
+
+// Multiple RPC endpoints for reliability (browser-compatible, CORS-enabled)
+// Helius RPC is most reliable if API key is set
 const RPC_ENDPOINTS = [
-  'https://solana-rpc.publicnode.com',
-  'https://go.getblock.io/d7dab8149ec7410aaa0f892c011420c1',
-  'https://api.mainnet-beta.solana.com'
+  ...(HELIUS_API_KEY ? [`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`] : []),
+  'https://solana-rpc.publicnode.com'
 ];
 
 // Known pump.fun / platform mint authorities (not real deployers)
@@ -79,293 +87,227 @@ function isKnownProgramOrAuthority(pubkey) {
 }
 
 /**
- * Find the real deployer for a token (handles pump.fun tokens where creator is mint authority)
+ * Find the real deployer for a token using Helius Enhanced API
+ * The feePayer of the token's first transaction is the real deployer
  * @param {string} tokenMint - The token mint address
- * @param {string} reportedCreator - The creator from rugcheck (may be pump.fun authority)
+ * @param {string} reportedCreator - The creator from rugcheck (fallback)
  * @returns {Promise<string>} The actual deployer wallet address
  */
 export async function findRealDeployer(tokenMint, reportedCreator) {
-  // Check if this is a pump.fun token (mint ends with 'pump')
-  const isPumpFunToken = tokenMint.toLowerCase().endsWith('pump');
+  console.log('Finding real deployer for token:', tokenMint);
 
-  // If reported creator is not a known mint authority AND not a pump.fun token, return as-is
-  if (!KNOWN_MINT_AUTHORITIES.includes(reportedCreator) && !isPumpFunToken) {
+  // Try Helius first (fast and reliable)
+  if (HELIUS_ENHANCED_API) {
+    try {
+      // Get the token's oldest transaction (creation tx)
+      const url = `${HELIUS_ENHANCED_API}/addresses/${tokenMint}/transactions?api-key=${HELIUS_API_KEY}&limit=1&sort-order=asc`;
+      const response = await fetch(url);
+
+      if (response.ok) {
+        const transactions = await response.json();
+        if (transactions && transactions.length > 0) {
+          const firstTx = transactions[0];
+          // The feePayer of the first transaction is the real deployer
+          if (firstTx.feePayer && !isKnownProgramOrAuthority(firstTx.feePayer)) {
+            console.log('Found real deployer via Helius:', firstTx.feePayer);
+            return firstTx.feePayer;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Helius deployer lookup failed:', err.message);
+    }
+  }
+
+  // Fallback: if not a known mint authority, use reported creator
+  if (!KNOWN_MINT_AUTHORITIES.includes(reportedCreator)) {
     return reportedCreator;
   }
 
-  console.log('Detected pump.fun token, finding real deployer...');
+  // Last resort for pump.fun tokens: use RPC
+  console.log('Falling back to RPC for deployer lookup...');
+  return findRealDeployerViaRPC(tokenMint, reportedCreator);
+}
 
+/**
+ * Fallback: Find real deployer using RPC (slower)
+ */
+async function findRealDeployerViaRPC(tokenMint, reportedCreator) {
   try {
-    // Find the creation transaction
-    let signatures = [];
-    let beforeSig = undefined;
-    let iterations = 0;
-    const maxIterations = 20; // Max 20k transactions
+    // Get oldest signature
+    const signatures = await rpcCall('getSignaturesForAddress', [tokenMint, { limit: 1 }]);
 
-    while (iterations < maxIterations) {
-      const params = { limit: 1000 };
-      if (beforeSig) {
-        params.before = beforeSig;
-      }
-
-      try {
-        const batch = await rpcCall('getSignaturesForAddress', [tokenMint, params]);
-
-        if (!batch || batch.length === 0) {
-          break;
-        }
-
-        signatures = batch; // Keep latest batch (oldest sigs)
-        beforeSig = batch[batch.length - 1].signature;
-        iterations++;
-
-        console.log(`Fetched ${iterations * 1000} signatures, continuing...`);
-
-        if (batch.length < 1000) {
-          break; // Reached the end
-        }
-      } catch (err) {
-        console.warn('Error fetching signatures batch:', err.message);
-        break; // Stop pagination on error but continue with what we have
-      }
-    }
-
-    if (signatures.length === 0) {
-      console.warn('No signatures found for token');
+    if (!signatures || signatures.length === 0) {
       return reportedCreator;
     }
 
-    // Get the oldest signature (the creation tx) - last in the final batch
-    const oldestSig = signatures[signatures.length - 1];
-    console.log('Found oldest signature:', oldestSig.signature);
-
-    // Get the transaction details
-    const tx = await rpcCall('getTransaction', [oldestSig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
+    // Get the transaction
+    const tx = await rpcCall('getTransaction', [signatures[0].signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
 
     if (!tx) {
       return reportedCreator;
     }
 
-    // Find the fee payer (the actual deployer who paid for the transaction)
+    // Find the first signer that's not a program
     const accountKeys = tx.transaction?.message?.accountKeys || [];
-
-    // The first signer that's not a program or known authority is usually the deployer
     for (const key of accountKeys) {
       const pubkey = typeof key === 'string' ? key : key.pubkey;
       const isSigner = typeof key === 'string' ? false : key.signer;
 
       if (isSigner && !isKnownProgramOrAuthority(pubkey)) {
-        console.log('Found real deployer from transaction signer:', pubkey);
+        console.log('Found real deployer via RPC:', pubkey);
         return pubkey;
-      }
-    }
-
-    // Strategy 3: Check inner instructions for the user who initiated
-    const innerInstructions = tx.meta?.innerInstructions || [];
-    for (const group of innerInstructions) {
-      for (const ix of group.instructions || []) {
-        const source = ix.parsed?.info?.source;
-        if (source && !isKnownProgramOrAuthority(source)) {
-          console.log('Found real deployer from inner instruction:', source);
-          return source;
-        }
-      }
-    }
-
-    // Strategy 4: Check log messages for pump.fun create instruction
-    const logMessages = tx.meta?.logMessages || [];
-    for (const log of logMessages) {
-      // Pump.fun logs often contain the creator address
-      if (log.includes('Program log: creator:')) {
-        const match = log.match(/creator:\s*([A-Za-z0-9]{32,44})/);
-        if (match && match[1] && !isKnownProgramOrAuthority(match[1])) {
-          console.log('Found real deployer from log message:', match[1]);
-          return match[1];
-        }
       }
     }
 
     return reportedCreator;
   } catch (error) {
-    console.error('Error finding real deployer:', error);
+    console.error('RPC deployer lookup failed:', error);
     return reportedCreator;
   }
 }
 
 /**
  * Get deployer wallet information including age and funding source
- * Uses free Solana RPC instead of paid Solscan Pro API
+ * Uses Helius Enhanced API (preferred) or falls back to RPC
  * @param {string} walletAddress - The deployer wallet address
  * @returns {Promise<{deployerAge: number|null, fundedBy: string|null, fundingTx: string|null}>}
  */
 export async function getDeployerInfo(walletAddress) {
-  try {
-    // Step 1: Get transaction signatures, paginating to find the oldest one
-    let signatures = [];
-    let beforeSig = undefined;
-    let iterations = 0;
-    const maxIterations = 10; // Max 10k transactions to check
-
-    // Paginate through signatures to find the oldest
-    while (iterations < maxIterations) {
-      const params = { limit: 1000 };
-      if (beforeSig) {
-        params.before = beforeSig;
+  // Try Helius first (faster and more reliable)
+  if (HELIUS_ENHANCED_API) {
+    try {
+      const result = await getDeployerInfoViaHelius(walletAddress);
+      if (result.fundedBy || result.deployerAge) {
+        return result;
       }
+    } catch (err) {
+      console.warn('Helius failed, falling back to RPC:', err.message);
+    }
+  }
 
-      try {
-        const batch = await rpcCall('getSignaturesForAddress', [walletAddress, params]);
+  // Fallback to RPC
+  return getDeployerInfoViaRPC(walletAddress);
+}
 
-        if (!batch || batch.length === 0) {
-          break; // No more signatures
+/**
+ * Get deployer info using Helius Enhanced API
+ */
+async function getDeployerInfoViaHelius(walletAddress) {
+  console.log('Fetching deployer info via Helius...');
+
+  // Get oldest transactions first using sort-order=asc
+  const url = `${HELIUS_ENHANCED_API}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=20&sort-order=asc`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Helius API returned ${response.status}`);
+  }
+
+  const transactions = await response.json();
+  console.log(`Helius returned ${transactions.length} oldest transactions`);
+
+  if (!transactions || transactions.length === 0) {
+    return { deployerAge: null, fundedBy: null, fundingTx: null };
+  }
+
+  // First transaction is the oldest (wallet creation/first funding)
+  const oldestTx = transactions[0];
+
+  // Calculate wallet age from oldest transaction
+  let deployerAge = null;
+  if (oldestTx.timestamp) {
+    const ageInDays = Math.floor((Date.now() / 1000 - oldestTx.timestamp) / (60 * 60 * 24));
+    deployerAge = ageInDays;
+  }
+
+  // Find the funding source - look for the largest incoming SOL transfer to this wallet
+  let fundedBy = null;
+  let fundingTx = oldestTx.signature;
+  let largestAmount = 0;
+
+  for (const tx of transactions) {
+    // Check nativeTransfers for incoming SOL to THIS wallet specifically
+    if (tx.nativeTransfers) {
+      for (const transfer of tx.nativeTransfers) {
+        // Must be a transfer TO the deployer wallet
+        if (transfer.toUserAccount === walletAddress && transfer.fromUserAccount) {
+          // Take the largest transfer (likely the initial funding, not dust)
+          if (transfer.amount > largestAmount) {
+            largestAmount = transfer.amount;
+            fundedBy = transfer.fromUserAccount;
+            fundingTx = tx.signature;
+            console.log('Found funder via Helius:', fundedBy, 'amount:', transfer.amount);
+          }
         }
-
-        signatures = batch; // Keep the latest batch (we want the oldest from the last batch)
-        beforeSig = batch[batch.length - 1].signature;
-        iterations++;
-
-        // If we got less than 1000, we've reached the end
-        if (batch.length < 1000) {
-          break;
-        }
-      } catch (err) {
-        console.warn('Failed to get signatures:', err.message);
-        break;
       }
     }
+  }
 
-    if (signatures.length === 0) {
-      console.log('No transactions found for wallet');
+  console.log('Deployer info from Helius:', { deployerAge, fundedBy, fundingTx });
+  return { deployerAge, fundedBy, fundingTx };
+}
+
+/**
+ * Fallback: Get deployer info using RPC
+ */
+async function getDeployerInfoViaRPC(walletAddress) {
+  console.log('Fetching deployer info via RPC...');
+
+  try {
+    // Get signatures to find oldest transaction
+    const signatures = await rpcCall('getSignaturesForAddress', [walletAddress, { limit: 1000 }]);
+
+    if (!signatures || signatures.length === 0) {
       return { deployerAge: null, fundedBy: null, fundingTx: null };
     }
 
-    // Get the oldest signature (last in the final batch)
+    // Get the oldest signature
     const oldestSig = signatures[signatures.length - 1];
-    const oldestSignature = oldestSig.signature;
-    const oldestBlockTime = oldestSig.blockTime;
 
-    // Calculate wallet age in days
+    // Calculate age
     let deployerAge = null;
-    if (oldestBlockTime) {
-      const ageInDays = Math.floor((Date.now() - oldestBlockTime * 1000) / (1000 * 60 * 60 * 24));
-      deployerAge = ageInDays;
+    if (oldestSig.blockTime) {
+      deployerAge = Math.floor((Date.now() - oldestSig.blockTime * 1000) / (1000 * 60 * 60 * 24));
     }
 
-    // Step 2: Get transaction details to find the funder
-    let transaction = null;
-    try {
-      transaction = await rpcCall('getTransaction', [oldestSignature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
-    } catch (err) {
-      console.warn('Failed to get transaction:', err.message);
-      return { deployerAge, fundedBy: null, fundingTx: oldestSignature };
-    }
+    // Get transaction details
+    const tx = await rpcCall('getTransaction', [oldestSig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
 
-    if (!transaction) {
-      return { deployerAge, fundedBy: null, fundingTx: oldestSignature };
-    }
-
-    // Find the funder by looking at transfer instructions (including inner instructions for CEX withdrawals)
     let fundedBy = null;
-    const instructions = transaction.transaction?.message?.instructions || [];
-    const innerInstructions = transaction.meta?.innerInstructions || [];
-
-    // Helper to check transfer instructions
-    const checkTransferInstruction = (ix) => {
-      // Check for system program transfer
-      if (ix.parsed?.type === 'transfer' && ix.program === 'system') {
-        const dest = ix.parsed.info?.destination;
-        const source = ix.parsed.info?.source;
-        if (dest === walletAddress && source) {
-          return source;
-        }
-      }
-      // Check for createAccount instruction
-      if (ix.parsed?.type === 'createAccount' && ix.program === 'system') {
-        const newAccount = ix.parsed.info?.newAccount;
-        const source = ix.parsed.info?.source;
-        if (newAccount === walletAddress && source) {
-          return source;
-        }
-      }
-      return null;
-    };
-
-    // Check main instructions
-    for (const ix of instructions) {
-      const funder = checkTransferInstruction(ix);
-      if (funder) {
-        fundedBy = funder;
-        break;
-      }
-    }
-
-    // If not found, check inner instructions (CEX withdrawals often use these)
-    if (!fundedBy) {
-      for (const innerGroup of innerInstructions) {
-        for (const ix of innerGroup.instructions || []) {
-          const funder = checkTransferInstruction(ix);
-          if (funder) {
-            fundedBy = funder;
+    if (tx) {
+      // Look for transfer to this wallet
+      const instructions = tx.transaction?.message?.instructions || [];
+      for (const ix of instructions) {
+        if (ix.parsed?.type === 'transfer' && ix.program === 'system') {
+          if (ix.parsed.info?.destination === walletAddress) {
+            fundedBy = ix.parsed.info?.source;
             break;
           }
         }
-        if (fundedBy) break;
       }
-    }
 
-    // If still not found, check pre/post balances to find who sent SOL
-    if (!fundedBy && transaction.meta) {
-      const preBalances = transaction.meta.preBalances || [];
-      const postBalances = transaction.meta.postBalances || [];
-      const accountKeys = transaction.transaction?.message?.accountKeys || [];
-
-      // Find our wallet's index
-      const walletIndex = accountKeys.findIndex(
-        key => (typeof key === 'string' ? key : key.pubkey) === walletAddress
-      );
-
-      if (walletIndex !== -1) {
-        const walletPreBalance = preBalances[walletIndex] || 0;
-        const walletPostBalance = postBalances[walletIndex] || 0;
-        const received = walletPostBalance - walletPreBalance;
-
-        // If we received SOL, find who sent it (their balance decreased)
-        if (received > 0) {
-          for (let i = 0; i < accountKeys.length; i++) {
-            if (i === walletIndex) continue;
-            const preBal = preBalances[i] || 0;
-            const postBal = postBalances[i] || 0;
-            const sent = preBal - postBal;
-
-            // Account that sent roughly the same amount we received (allowing for fees)
-            if (sent > 0 && Math.abs(sent - received) < 10000000) { // Within 0.01 SOL for fees
-              const key = accountKeys[i];
-              fundedBy = typeof key === 'string' ? key : key.pubkey;
-              break;
+      // Check inner instructions
+      if (!fundedBy) {
+        const innerInstructions = tx.meta?.innerInstructions || [];
+        for (const group of innerInstructions) {
+          for (const ix of group.instructions || []) {
+            if (ix.parsed?.type === 'transfer' && ix.program === 'system') {
+              if (ix.parsed.info?.destination === walletAddress) {
+                fundedBy = ix.parsed.info?.source;
+                break;
+              }
             }
           }
+          if (fundedBy) break;
         }
       }
     }
 
-    // If no funder found in instructions, check if fee payer is different from wallet
-    if (!fundedBy) {
-      const accountKeys = transaction.transaction?.message?.accountKeys || [];
-      const feePayer = accountKeys.find(key => key.signer && key.writable);
-      if (feePayer && feePayer.pubkey !== walletAddress) {
-        fundedBy = feePayer.pubkey;
-      }
-    }
-
-    console.log('Deployer info from Solana RPC:', { deployerAge, fundedBy, fundingTx: oldestSignature });
-
-    return {
-      deployerAge,
-      fundedBy,
-      fundingTx: oldestSignature
-    };
+    console.log('Deployer info from RPC:', { deployerAge, fundedBy });
+    return { deployerAge, fundedBy, fundingTx: oldestSig.signature };
   } catch (error) {
-    console.error('getDeployerInfo error:', error);
+    console.error('RPC getDeployerInfo error:', error);
     return { deployerAge: null, fundedBy: null, fundingTx: null };
   }
 }
@@ -375,6 +317,71 @@ export async function getDeployerInfo(walletAddress) {
  */
 export function getSolscanWalletUrl(address) {
   return `https://solscan.io/account/${address}`;
+}
+
+/**
+ * Get other tokens created by the same deployer
+ * Scans deployer's transactions for pump.fun token creations
+ * @param {string} deployerAddress - The deployer wallet address
+ * @param {string} excludeToken - Current token to exclude from results
+ * @returns {Promise<Array<{mint: string, createdAt: string}>>}
+ */
+export async function getDeployerCreatedTokens(deployerAddress, excludeToken) {
+  if (!HELIUS_ENHANCED_API || !deployerAddress) {
+    return [];
+  }
+
+  console.log('Finding other tokens created by wallet:', deployerAddress);
+
+  try {
+    // Get wallet's transactions
+    const url = `${HELIUS_ENHANCED_API}/addresses/${deployerAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=100`;
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      console.warn('Failed to fetch transactions for wallet:', deployerAddress, response.status);
+      return [];
+    }
+
+    const transactions = await response.json();
+    const excludeLower = excludeToken?.toLowerCase();
+
+    // Look for CREATE transactions where this wallet is the feePayer
+    // This avoids needing to verify each token separately (which causes rate limiting)
+    const createdTokens = [];
+    const seenMints = new Set();
+
+    for (const tx of transactions) {
+      // Only look at transactions where this wallet paid the fee (they initiated it)
+      if (tx.feePayer !== deployerAddress) continue;
+
+      // Look for PUMP_FUN CREATE transactions
+      if (tx.source === 'PUMP_FUN' && tx.type === 'CREATE') {
+        // Get the token from tokenTransfers
+        if (tx.tokenTransfers) {
+          for (const transfer of tx.tokenTransfers) {
+            if (transfer.mint && transfer.mint.toLowerCase().endsWith('pump')) {
+              const mintLower = transfer.mint.toLowerCase();
+              if (mintLower !== excludeLower && !seenMints.has(mintLower)) {
+                seenMints.add(mintLower);
+                createdTokens.push({
+                  mint: transfer.mint,
+                  createdAt: tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : null
+                });
+                console.log('Found created token:', transfer.mint);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    console.log(`Found ${createdTokens.length} tokens created by wallet ${deployerAddress}`);
+    return createdTokens;
+  } catch (error) {
+    console.error('Error finding deployer tokens:', error);
+    return [];
+  }
 }
 
 export function getSolscanTxUrl(txHash) {

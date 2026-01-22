@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { getFairScore, getTierFromScore } from './services/fairscale';
 import { getTokenReport } from './services/rugcheck';
 import { generateRoast } from './services/grok';
-import { getDeployerInfo, findRealDeployer } from './services/solscan';
+import { getDeployerInfo, findRealDeployer, getDeployerCreatedTokens } from './services/solscan';
 import { getDeployerWalletInfo } from './services/birdeye';
 import { loadLeaderboard, saveToLeaderboard, clearLeaderboard, isValidSolanaAddress, cleanTwitterHandle } from './utils/storage';
 import { fetchRecentChecks, saveRecentCheck } from './services/recentChecks';
@@ -93,8 +93,12 @@ function App() {
       const deployerWallet = await findRealDeployer(tokenCA, reportedCreator);
       console.log('Real deployer:', deployerWallet, '(reported:', reportedCreator, ')');
 
-      const allCreatorTokens = tokenReport.creatorTokens || [];
-      const tokensLaunched = allCreatorTokens.length + 1;
+      // Get creator tokens from rugcheck initially (will be augmented after we get funder info)
+      let rugcheckCreatorTokens = tokenReport.creatorTokens || [];
+      console.log('Rugcheck creatorTokens:', rugcheckCreatorTokens);
+
+      // tokensLaunched will be recalculated after we fetch from both deployer and funder
+      let allCreatorTokens = rugcheckCreatorTokens;
 
       let currentMarketCap = null;
       if (tokenReport.price != null && tokenReport.token?.supply != null) {
@@ -146,6 +150,31 @@ function App() {
 
       const { deployerAge: rpcDeployerAge, fundedBy, fundingTx } = deployerInfo;
       const { netWorth, solBalance, tokenCount } = walletInfo;
+
+      // Now that we have fundedBy, fetch creator tokens from BOTH deployer AND funder
+      if (rugcheckCreatorTokens.length === 0) {
+        // Get tokens from deployer
+        const deployerTokens = await getDeployerCreatedTokens(deployerWallet, tokenCA);
+
+        // Get tokens from funder too (if different from deployer)
+        let funderTokens = [];
+        if (fundedBy && fundedBy !== deployerWallet) {
+          funderTokens = await getDeployerCreatedTokens(fundedBy, tokenCA);
+        }
+
+        // Merge both (avoid duplicates)
+        const seenMints = new Set(deployerTokens.map(t => t.mint));
+        allCreatorTokens = [...deployerTokens];
+        for (const token of funderTokens) {
+          if (!seenMints.has(token.mint)) {
+            allCreatorTokens.push(token);
+          }
+        }
+      }
+
+      // Recalculate tokensLaunched with the full creator tokens list
+      const tokensLaunched = allCreatorTokens.length + 1;
+      console.log('Final allCreatorTokens:', allCreatorTokens);
 
       // Prefer token-based age (more accurate), fallback to RPC-based age
       const deployerAge = tokenBasedAge ?? rpcDeployerAge;
@@ -307,23 +336,23 @@ function LandingScreen({ tokenCA, setTokenCA, devTwitter, setDevTwitter, onSubmi
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-8">
+    <div className="min-h-screen flex items-center justify-center p-[5%]">
       <div className="w-full max-w-md animate-scale-pop">
-        <div className="card-funky p-8">
+        <div className="card-funky p-[8%]">
           {/* Header */}
-          <div className="text-center mb-8">
+          <div className="text-center mb-[8%]">
             <img
               src={emoji}
               alt="emoji"
-              className="w-20 h-20 mx-auto mb-6 animate-float"
+              className="w-20 h-20 mx-auto mb-[6%] animate-float"
             />
             <h1 className="text-2xl font-bold text-[var(--color-text-primary)] uppercase tracking-tight">
-              do you trust the dev?
+              why trust the dev?
             </h1>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-[5%]">
             <div>
               <label className="block text-[var(--color-accent)] text-xs mb-2 uppercase tracking-widest font-bold">
                 token ca
@@ -354,7 +383,7 @@ function LandingScreen({ tokenCA, setTokenCA, devTwitter, setDevTwitter, onSubmi
             </div>
 
             {error && (
-              <div className="border-2 border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-[var(--color-danger)] text-sm text-center font-bold uppercase animate-shake">
+              <div className="border-2 border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-[4%] text-[var(--color-danger)] text-sm text-center font-bold uppercase animate-shake">
                 {error}
               </div>
             )}
@@ -362,15 +391,15 @@ function LandingScreen({ tokenCA, setTokenCA, devTwitter, setDevTwitter, onSubmi
             <button
               type="submit"
               disabled={!tokenCA.trim()}
-              className="btn-funky w-full mt-4"
+              className="btn-funky w-full mt-[4%]"
             >
-              <span>fuck around</span>
+              <span>VERIFY!</span>
             </button>
           </form>
         </div>
 
         {/* Footer */}
-        <p className="text-center text-[var(--color-text-tertiary)] text-xs mt-6">
+        <p className="text-center text-[var(--color-text-tertiary)] text-xs mt-[6%]">
           powered by{' '}
           <a
             href="https://app.fairscale.xyz"
@@ -408,17 +437,17 @@ function LoadingScreen({ emoji }) {
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-8">
+    <div className="min-h-screen flex items-center justify-center p-[5%]">
       <div className="text-center">
         <img
           src={emoji}
           alt="checking"
-          className="w-28 h-28 mx-auto mb-8 animate-chaos-spin"
+          className="w-28 h-28 mx-auto mb-[8%] animate-chaos-spin"
         />
         <p className="text-[var(--color-text-primary)] text-lg font-bold uppercase tracking-wider">
           checking
         </p>
-        <p className="text-[var(--color-text-secondary)] text-sm mt-2">
+        <p className="text-[var(--color-text-secondary)] text-sm mt-[2%]">
           {phrases[phraseIndex]}
           <span className="typing-dots" />
         </p>
@@ -442,17 +471,17 @@ function RoastScreen({ result, onFindOut }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-8">
+    <div className="min-h-screen flex items-center justify-center p-[5%]">
       <div className="w-full max-w-lg animate-bounce-in">
-        <div className="card-funky p-8 text-center">
+        <div className="card-funky p-[8%] text-center">
           <img
             src={emoji}
             alt="result"
-            className="w-24 h-24 mx-auto mb-6 animate-float"
+            className="w-24 h-24 mx-auto mb-[6%] animate-float"
           />
 
           {result.tokenName && (
-            <div className="mb-4">
+            <div className="mb-[4%]">
               <span className="text-[var(--color-text-secondary)] text-sm">
                 {result.tokenName}
                 {result.tokenSymbol && ` $${result.tokenSymbol}`}
@@ -461,14 +490,14 @@ function RoastScreen({ result, onFindOut }) {
           )}
 
           {/* Roast - no quotes */}
-          <div className="mb-8">
+          <div className="mb-[8%]">
             <p
               className="text-xl font-bold leading-relaxed"
               style={{ color: tierColor[result.tier] }}
             >
               {result.roast}
             </p>
-            <p className="text-[var(--color-text-tertiary)] text-xs mt-4 uppercase tracking-wider">
+            <p className="text-[var(--color-text-tertiary)] text-xs mt-[4%] uppercase tracking-wider">
               — grok
             </p>
           </div>
@@ -501,7 +530,7 @@ function ResultsScreen({ result, leaderboard, onBack, onTokenClick, onClearLeade
 
           <div className="flex items-center gap-3">
             <img src={getRandomEmoji('check')} alt="" className="w-6 h-6" />
-            <span className="font-bold text-[var(--color-text-primary)] uppercase tracking-wide">trust check</span>
+            <span className="font-bold text-[var(--color-text-primary)] uppercase tracking-wide">why trust dev</span>
           </div>
 
           <div className="w-24" />
@@ -585,67 +614,90 @@ function DeployerCard({ result }) {
       className="card-funky overflow-hidden h-full flex flex-col relative"
     >
       {/* Score header with corner emojis */}
-      <div className="px-[3vw] py-[4vh] text-center border-b-2 border-[var(--color-border)] relative">
+      <div
+        className="px-[6%] text-center border-b-2 border-[var(--color-border)] relative"
+        style={{ paddingTop: '8vh', paddingBottom: '5vh' }}
+      >
         {/* Top-left emoji */}
         <img
           src={cornerEmojis[0]}
           alt=""
-          className="absolute top-[5%] left-[5%] w-12 h-12 animate-dvd-bounce"
+          className="absolute animate-dvd-bounce"
+          style={{ top: '3vh', left: '3%', width: '8vw', height: '8vw', minWidth: '60px', minHeight: '60px', maxWidth: '100px', maxHeight: '100px' }}
         />
         {/* Top-right emoji */}
         <img
           src={cornerEmojis[1]}
           alt=""
-          className="absolute top-[5%] right-[5%] w-12 h-12 animate-dvd-bounce"
-          style={{ animationDelay: '2s' }}
+          className="absolute animate-dvd-bounce"
+          style={{ top: '3vh', right: '3%', width: '8vw', height: '8vw', minWidth: '60px', minHeight: '60px', maxWidth: '100px', maxHeight: '100px', animationDelay: '2s' }}
         />
-        {/* Bottom-right: powered by FairScale */}
-        <a
-          href="https://app.fairscale.xyz"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute bottom-[5%] right-[5%] text-[var(--color-text-tertiary)] text-[10px] hover:text-[var(--color-accent)] transition-colors"
-        >
-          powered by FairScale
-        </a>
 
         {result.tokenName && (
-          <div className="text-[var(--color-text-secondary)] text-sm mb-[2vh] mt-[1vh]">
+          <div className="text-[var(--color-text-secondary)] text-sm" style={{ marginBottom: '3vh', marginTop: '2vh' }}>
             {result.tokenName}
             {result.tokenSymbol && <span className="opacity-60"> ${result.tokenSymbol}</span>}
           </div>
         )}
 
-        <div className="animate-score-reveal my-[3vh]">
+        <div className="animate-score-reveal" style={{ marginTop: '4vh', marginBottom: '4vh' }}>
           <span
-            className={`text-6xl font-black ${tierGlow[result.tier]}`}
+            className={`text-8xl font-black ${tierGlow[result.tier]}`}
             style={{ color: tierColor[result.tier] }}
           >
             {result.fairScore}
           </span>
-          <span className="text-base text-[var(--color-text-tertiary)] font-bold">/1000</span>
+          <span className="text-xl text-[var(--color-text-tertiary)] font-bold">/1000</span>
         </div>
 
         <div
-          className="text-sm font-black mt-[2vh] uppercase tracking-widest"
-          style={{ color: tierColor[result.tier] }}
+          className="text-lg font-black uppercase tracking-widest"
+          style={{ color: tierColor[result.tier], marginTop: '3vh' }}
         >
           {getTierLabel(result.tier)}
         </div>
 
         {/* Grok quote - moved here beneath the score */}
-        <div className="mt-[3vh] px-[2vw] mb-[2vh]">
+        <div className="px-[10%]" style={{ marginTop: '4vh', marginBottom: '4vh' }}>
           <p
-            className="text-base italic leading-relaxed"
+            className="text-xl italic leading-relaxed"
             style={{ color: tierColor[result.tier] }}
           >
             {result.roast}
           </p>
         </div>
+
+        {/* Bottom-right: powered by FairScale */}
+        <a
+          href="https://app.fairscale.xyz"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute text-[var(--color-text-tertiary)] text-[11px] hover:text-[var(--color-accent)] transition-colors"
+          style={{ bottom: '2vh', right: '3%' }}
+        >
+          powered by FairScale
+        </a>
       </div>
 
+      {/* Risks - moved above deployer info */}
+      {result.risks && result.risks.length > 0 && (
+        <div className="px-[3%] py-[2.5%] border-b-2 border-[var(--color-border)] bg-[var(--color-danger)]/5">
+          <div className="text-[var(--color-danger)] text-xs uppercase tracking-widest mb-3 font-black">
+            ⚠ risks detected
+          </div>
+          <ul className="space-y-2">
+            {result.risks.slice(0, 3).map((risk, i) => (
+              <li key={i} className="text-[var(--color-text-secondary)] text-sm flex items-start gap-2">
+                <span className="text-[var(--color-danger)]">!</span>
+                <span>{risk.name || risk.description}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Deployer + Funder + Age */}
-      <div className="px-8 py-5 border-b-2 border-[var(--color-border)] grid grid-cols-3 gap-4">
+      <div className="px-[3%] py-[2.5%] border-b-2 border-[var(--color-border)] grid grid-cols-3 gap-[2%]">
         <div>
           <div className="text-[var(--color-accent)] text-xs uppercase tracking-widest mb-2 font-bold">
             deployer
@@ -686,29 +738,12 @@ function DeployerCard({ result }) {
         </div>
       </div>
 
-      {/* Risks */}
-      {result.risks && result.risks.length > 0 && (
-        <div className="px-8 py-5 border-b-2 border-[var(--color-border)] bg-[var(--color-danger)]/5">
-          <div className="text-[var(--color-danger)] text-xs uppercase tracking-widest mb-3 font-black">
-            ⚠ risks detected
-          </div>
-          <ul className="space-y-2">
-            {result.risks.slice(0, 3).map((risk, i) => (
-              <li key={i} className="text-[var(--color-text-secondary)] text-sm flex items-start gap-2">
-                <span className="text-[var(--color-danger)]">!</span>
-                <span>{risk.name || risk.description}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {/* Deployer Wallet Info */}
-      <div className="px-8 py-5 border-b-2 border-[var(--color-border)]">
-        <div className="text-[var(--color-accent)] text-xs uppercase tracking-widest mb-4 font-bold">
+      <div className="px-[3%] py-[2.5%] border-b-2 border-[var(--color-border)]">
+        <div className="text-[var(--color-accent)] text-xs uppercase tracking-widest mb-[3%] font-bold">
           deployer wallet
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-[2%]">
           <MetricItem label="net worth" value={formatMarketCap(result.deployerNetWorth)} />
           <MetricItem label="sol balance" value={result.deployerSolBalance != null ? `${result.deployerSolBalance.toFixed(2)} SOL` : '-'} />
           <MetricItem label="tokens launched" value={result.tokensLaunched || '-'} />
@@ -725,7 +760,7 @@ function DeployerCard({ result }) {
 
 function MetricItem({ label, value }) {
   return (
-    <div className="bg-[var(--color-bg-tertiary)] p-3 border border-[var(--color-border)]">
+    <div className="bg-[var(--color-bg-tertiary)] p-[8%] border border-[var(--color-border)]">
       <div className="text-[var(--color-text-tertiary)] text-xs mb-1 uppercase">{label}</div>
       <div className="text-[var(--color-text-primary)] text-sm font-bold">{value}</div>
     </div>
@@ -751,9 +786,9 @@ function CreatorTokensList({ tokens }) {
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
-      <div className="px-8 py-4 border-b-2 border-[var(--color-border)]">
+      <div className="px-[3%] py-[2%] border-b-2 border-[var(--color-border)]">
         <span className="text-[var(--color-accent)] text-xs uppercase tracking-widest font-bold">
-          other tokens ({tokens.length})
+          other tokens by this dev ({tokens.length})
         </span>
       </div>
       <div className="flex-1 overflow-auto">
@@ -763,9 +798,9 @@ function CreatorTokensList({ tokens }) {
             href={`https://solscan.io/token/${token.mint}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between px-8 py-3 hover:bg-[var(--color-bg-tertiary)] transition-colors border-b border-[var(--color-border-light)]"
+            className="flex items-center justify-between px-[3%] py-3 hover:bg-[var(--color-bg-tertiary)] transition-colors border-b border-[var(--color-border-light)]"
           >
-            <span className="text-[var(--color-accent)] text-sm">
+            <span className="text-[var(--color-text-primary)] text-sm">
               {truncateAddress(token.mint)}
             </span>
             <span className="text-[var(--color-text-secondary)] text-xs">
@@ -782,6 +817,8 @@ function CreatorTokensList({ tokens }) {
 // RECENT CHECKS
 // ==============================================
 function RecentChecks({ leaderboard, onTokenClick, onClear, currentToken }) {
+  const [copiedAddress, setCopiedAddress] = useState(null);
+
   const tierColor = {
     ELITE: 'var(--color-elite)',
     TRUSTED: 'var(--color-trusted)',
@@ -795,11 +832,18 @@ function RecentChecks({ leaderboard, onTokenClick, onClear, currentToken }) {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
+  const copyToClipboard = (e, address) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(address);
+    setCopiedAddress(address);
+    setTimeout(() => setCopiedAddress(null), 1500);
+  };
+
   const sortedData = [...leaderboard].sort((a, b) => b.checkedAt - a.checkedAt);
 
   return (
     <div className="card-funky h-full flex flex-col">
-      <div className="px-8 py-5 border-b-2 border-[var(--color-border)] flex items-center justify-between">
+      <div className="px-[3%] py-[2.5%] border-b-2 border-[var(--color-border)] flex items-center justify-between">
         <h2 className="font-bold text-[var(--color-text-primary)] uppercase tracking-wide">
           recent checks
         </h2>
@@ -815,7 +859,7 @@ function RecentChecks({ leaderboard, onTokenClick, onClear, currentToken }) {
 
       <div className="flex-1 overflow-auto">
         {leaderboard.length === 0 ? (
-          <div className="p-8 text-center text-[var(--color-text-tertiary)]">
+          <div className="p-[5%] text-center text-[var(--color-text-tertiary)]">
             <img src={getRandomEmoji('mid')} alt="" className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p className="text-sm uppercase">no tokens checked yet</p>
           </div>
@@ -825,10 +869,11 @@ function RecentChecks({ leaderboard, onTokenClick, onClear, currentToken }) {
               <div
                 key={entry.tokenAddress}
                 onClick={() => onTokenClick(entry)}
-                className={`px-8 py-5 border-b-2 border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)] cursor-pointer transition-colors ${
+                className={`px-[3%] py-[3%] border-b-2 border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)] cursor-pointer transition-colors ${
                   entry.tokenAddress === currentToken ? 'bg-[var(--color-bg-tertiary)]' : ''
                 }`}
               >
+                {/* Row 1: Score + Token Name + Tier Badge */}
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-4">
                     <span
@@ -852,14 +897,35 @@ function RecentChecks({ leaderboard, onTokenClick, onClear, currentToken }) {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-4 text-xs text-[var(--color-text-tertiary)]">
-                  {entry.tokenName && (
+                {/* Row 2: Contract (copyable) + Twitter (clickable) + Date */}
+                <div className="flex items-center gap-4 text-xs">
+                  {/* Contract Address - copyable */}
+                  <button
+                    onClick={(e) => copyToClipboard(e, entry.tokenAddress)}
+                    className="text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors flex items-center gap-1"
+                    title="Click to copy"
+                  >
                     <span>{truncateAddress(entry.tokenAddress)}</span>
-                  )}
+                    <span className="text-[10px]">
+                      {copiedAddress === entry.tokenAddress ? '✓' : '⧉'}
+                    </span>
+                  </button>
+
+                  {/* Twitter Handle - clickable link */}
                   {entry.twitterHandle && (
-                    <span>@{entry.twitterHandle}</span>
+                    <a
+                      href={`https://twitter.com/${entry.twitterHandle}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] transition-colors font-bold"
+                    >
+                      @{entry.twitterHandle}
+                    </a>
                   )}
-                  <span>
+
+                  {/* Date */}
+                  <span className="text-[var(--color-text-tertiary)] ml-auto">
                     {new Date(entry.checkedAt).toLocaleDateString()}
                   </span>
                 </div>

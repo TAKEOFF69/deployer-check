@@ -1,21 +1,7 @@
-// Use proxy in development to avoid CORS issues
-const FAIRSCALE_API_URL = import.meta.env.DEV ? '/api/fairscale' : 'https://api.fairscale.xyz';
-const FAIRSCALE_API_KEY = import.meta.env.VITE_FAIRSCALE_API_KEY;
+// Always use our serverless proxy - API key stays server-side
+const FAIRSCALE_PROXY_URL = '/api/fairscale';
 
 export async function getFairScore(walletAddress, twitterHandle = null) {
-  // Debug: log API key presence and URL
-  console.log('FairScale config:', {
-    apiUrl: FAIRSCALE_API_URL,
-    hasApiKey: !!FAIRSCALE_API_KEY,
-    isDev: import.meta.env.DEV
-  });
-
-  // If no API key is configured, return mock data for development
-  if (!FAIRSCALE_API_KEY) {
-    console.warn('FairScale API key not configured, using mock data');
-    return getMockFairScore(walletAddress);
-  }
-
   try {
     // Build query params
     const params = new URLSearchParams();
@@ -24,29 +10,16 @@ export async function getFairScore(walletAddress, twitterHandle = null) {
       params.append('twitter', twitterHandle);
     }
 
-    const url = `${FAIRSCALE_API_URL}/score?${params.toString()}`;
-    console.log('Calling FairScale API:', url);
+    const url = `${FAIRSCALE_PROXY_URL}?${params.toString()}`;
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'fairkey': FAIRSCALE_API_KEY
-      }
-    });
-
-    console.log('FairScale response status:', response.status);
+    const response = await fetch(url);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('FairScale API error:', response.status, errorText);
+      console.error('FairScale proxy error:', response.status);
       throw new Error(`FairScale API error: ${response.status}`);
     }
 
-    const text = await response.text();
-    console.log('FairScale raw response:', text);
-
-    const data = JSON.parse(text);
-    console.log('FairScale API response parsed:', data);
+    const data = await response.json();
 
     // Scale score from 0-100 to 0-1000 for UI display
     const scaledScore = Math.round((data.fairscore ?? 50) * 10);
