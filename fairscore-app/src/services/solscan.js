@@ -221,25 +221,38 @@ async function getDeployerInfoViaHelius(walletAddress) {
     deployerAge = ageInDays;
   }
 
-  // Find the funding source - look for the largest incoming SOL transfer to this wallet
+  // Find the funding source - look for the FIRST incoming SOL transfer to this wallet
+  // We want the original funder, not necessarily the largest transfer
   let fundedBy = null;
   let fundingTx = oldestTx.signature;
-  let largestAmount = 0;
 
+  // Transactions are already sorted ascending (oldest first)
+  // Find the first transaction with an incoming transfer
   for (const tx of transactions) {
     // Check nativeTransfers for incoming SOL to THIS wallet specifically
     if (tx.nativeTransfers) {
+      // Within the same transaction, take the largest transfer (to avoid dust)
+      let bestTransferInTx = null;
+      let largestInTx = 0;
+
       for (const transfer of tx.nativeTransfers) {
-        // Must be a transfer TO the deployer wallet
-        if (transfer.toUserAccount === walletAddress && transfer.fromUserAccount) {
-          // Take the largest transfer (likely the initial funding, not dust)
-          if (transfer.amount > largestAmount) {
-            largestAmount = transfer.amount;
-            fundedBy = transfer.fromUserAccount;
-            fundingTx = tx.signature;
-            console.log('Found funder via Helius:', fundedBy, 'amount:', transfer.amount);
+        // Must be a transfer TO the deployer wallet from another wallet
+        if (transfer.toUserAccount === walletAddress &&
+            transfer.fromUserAccount &&
+            transfer.fromUserAccount !== walletAddress) {
+          if (transfer.amount > largestInTx) {
+            largestInTx = transfer.amount;
+            bestTransferInTx = transfer;
           }
         }
+      }
+
+      // If we found an incoming transfer in this (oldest) transaction, use it
+      if (bestTransferInTx && largestInTx > 10000) { // > 0.00001 SOL to skip dust
+        fundedBy = bestTransferInTx.fromUserAccount;
+        fundingTx = tx.signature;
+        console.log('Found original funder via Helius:', fundedBy, 'amount:', largestInTx, 'tx:', tx.signature);
+        break; // Stop at the first transaction with meaningful incoming SOL
       }
     }
   }
