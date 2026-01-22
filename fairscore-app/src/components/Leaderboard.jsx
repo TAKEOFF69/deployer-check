@@ -60,7 +60,7 @@ export default function Leaderboard({ data, onTokenClick, onClear }) {
 }
 
 function LeaderboardRow({ entry, rank, onClick }) {
-  const tierColor = getTierColor(entry.tier || 'NEUTRAL');
+  const tierColor = getTierColor(entry.tier || 'MEH');
 
   return (
     <tr

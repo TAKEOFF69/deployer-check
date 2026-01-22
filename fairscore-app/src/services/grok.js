@@ -4,35 +4,49 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 
 const fallbackRoasts = {
-  ELITE: [
+  'UNICORN': [
     "Like finding a parking spot in Manhattan. Suspicious but take it.",
     "This wallet is cleaner than your browser history. Somehow.",
     "The crypto equivalent of someone who returns their shopping cart.",
     "Either genuinely legit or playing 4D chess. Either way, respect.",
     "Your mom would approve. That's either good or concerning."
   ],
-  TRUSTED: [
+  'KEEP AN EYE': [
     "Surprisingly not a disaster. Your standards are low but met.",
     "Like a Costco rotisserie chicken - reliable, no surprises.",
     "The Honda Civic of deployers. Boring but probably won't explode.",
     "Passed the vibe check but just barely.",
     "Good enough for government work, as they say."
   ],
-  NEUTRAL: [
+  'POTENTIAL': [
+    "Shows promise like a junior dev who googles everything.",
+    "Could be the next big thing. Could also be nothing.",
+    "Diamond hands or paper hands? Time will tell.",
+    "Has potential. So did my ex. Just saying.",
+    "Interesting enough to watch, not enough to YOLO."
+  ],
+  'MEH+': [
     "Your grandma's meatloaf: nothing special but won't kill you.",
-    "This wallet has the same energy as gas station sushi.",
     "Could go either way, like your fantasy football picks.",
     "The human equivalent of a participation trophy.",
-    "Mid. Just aggressively, unapologetically mid."
+    "Mid-plus. The plus is doing a lot of heavy lifting here.",
+    "Better than average, which is a low bar but still."
   ],
-  RISKY: [
+  'MEH': [
+    "This wallet has the same energy as gas station sushi.",
+    "Mid. Just aggressively, unapologetically mid.",
+    "The human equivalent of beige wallpaper.",
+    "Not great, not terrible. The Chernobyl of wallets.",
+    "About as exciting as watching paint dry. Beige paint."
+  ],
+  'RISKY': [
     "About as stable as my dad's marriage. Third one.",
     "This wallet gives off 'trust me bro' energy.",
     "Red flags so bright they're visible from space.",
     "Would not leave this wallet alone with your drink.",
     "The crypto equivalent of a carnival goldfish."
   ],
-  DANGER: [
+  'DANGER': [
     "This wallet makes Nigerian princes look like Warren Buffett.",
     "Run. Don't walk. Actually, maybe drive.",
     "This deployer's risk level is 'hold my beer' personified.",
@@ -42,7 +56,7 @@ const fallbackRoasts = {
 };
 
 const getRandomFallback = (tier) => {
-  const roasts = fallbackRoasts[tier] || fallbackRoasts.NEUTRAL;
+  const roasts = fallbackRoasts[tier] || fallbackRoasts['MEH'];
   return roasts[Math.floor(Math.random() * roasts.length)];
 };
 
@@ -77,9 +91,12 @@ Style:
 - NO buzzword salads. NO forced slang stacking.
 
 Tone by score:
-- 700+: Backhanded compliment. "Like finding a unicorn. Probably fake but hey."
-- 400-699: Light mockery. "Has the same energy as a participation trophy."
-- Under 400: Savage warning with a joke. "Makes Nigerian princes look like Warren Buffett."
+- 700+ (UNICORN): Backhanded compliment. "Like finding a unicorn. Probably fake but hey."
+- 600-699 (KEEP AN EYE): Cautiously optimistic. "Shows promise. So did my ex."
+- 500-599 (POTENTIAL): Hopeful but skeptical. "Could be the next big thing. Or nothing."
+- 400-499 (MEH+): Light mockery. "Has the same energy as a participation trophy."
+- 300-399 (MEH): Unimpressed. "The human equivalent of beige wallpaper."
+- Under 300: Savage warning with a joke. "Makes Nigerian princes look like Warren Buffett."
 
 One punchy line. Make it cheeky, not cringe.`
           },

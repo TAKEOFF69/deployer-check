@@ -17,7 +17,9 @@
   /* Trust tier colors - more saturated */
   --color-elite: #00ff6a;
   --color-trusted: #00d4ff;
+  --color-potential: #a855f7;
   --color-neutral: #ffcc00;
+  --color-meh: #fbbf24;
   --color-risky: #ff6b00;
   --color-danger: #ff0040;
 
@@ -196,7 +198,9 @@ body {
 
 .glow-elite { text-shadow: 0 0 20px rgba(0, 255, 106, 0.8), 0 0 40px rgba(0, 255, 106, 0.4); }
 .glow-trusted { text-shadow: 0 0 20px rgba(0, 212, 255, 0.8), 0 0 40px rgba(0, 212, 255, 0.4); }
+.glow-potential { text-shadow: 0 0 20px rgba(168, 85, 247, 0.8), 0 0 40px rgba(168, 85, 247, 0.4); }
 .glow-neutral { text-shadow: 0 0 20px rgba(255, 204, 0, 0.8), 0 0 40px rgba(255, 204, 0, 0.4); }
+.glow-meh { text-shadow: 0 0 20px rgba(251, 191, 36, 0.8), 0 0 40px rgba(251, 191, 36, 0.4); }
 .glow-risky { text-shadow: 0 0 20px rgba(255, 107, 0, 0.8), 0 0 40px rgba(255, 107, 0, 0.4); }
 .glow-danger { text-shadow: 0 0 20px rgba(255, 0, 64, 0.8), 0 0 40px rgba(255, 0, 64, 0.4); }
 

@@ -21,8 +21,8 @@ const getRandomEmoji = (category) => {
 };
 
 const getTierEmoji = (tier) => {
-  if (tier === 'ELITE' || tier === 'TRUSTED') return getRandomEmoji('good');
-  if (tier === 'NEUTRAL') return getRandomEmoji('mid');
+  if (tier === 'UNICORN' || tier === 'KEEP AN EYE') return getRandomEmoji('good');
+  if (tier === 'POTENTIAL' || tier === 'MEH+' || tier === 'MEH') return getRandomEmoji('mid');
   return getRandomEmoji('bad');
 };
 
@@ -457,11 +457,13 @@ function RoastScreen({ result, onFindOut }) {
   const [emoji] = useState(getTierEmoji(result.tier));
 
   const tierColor = {
-    ELITE: 'var(--color-elite)',
-    TRUSTED: 'var(--color-trusted)',
-    NEUTRAL: 'var(--color-neutral)',
-    RISKY: 'var(--color-risky)',
-    DANGER: 'var(--color-danger)'
+    'UNICORN': 'var(--color-elite)',
+    'KEEP AN EYE': 'var(--color-trusted)',
+    'POTENTIAL': 'var(--color-potential)',
+    'MEH+': 'var(--color-neutral)',
+    'MEH': 'var(--color-meh)',
+    'RISKY': 'var(--color-risky)',
+    'DANGER': 'var(--color-danger)'
   };
 
   return (
@@ -567,25 +569,31 @@ function DeployerCard({ result }) {
   });
 
   const tierColor = {
-    ELITE: 'var(--color-elite)',
-    TRUSTED: 'var(--color-trusted)',
-    NEUTRAL: 'var(--color-neutral)',
-    RISKY: 'var(--color-risky)',
-    DANGER: 'var(--color-danger)'
+    'UNICORN': 'var(--color-elite)',
+    'KEEP AN EYE': 'var(--color-trusted)',
+    'POTENTIAL': 'var(--color-potential)',
+    'MEH+': 'var(--color-neutral)',
+    'MEH': 'var(--color-meh)',
+    'RISKY': 'var(--color-risky)',
+    'DANGER': 'var(--color-danger)'
   };
 
   const tierGlow = {
-    ELITE: 'glow-elite',
-    TRUSTED: 'glow-trusted',
-    NEUTRAL: 'glow-neutral',
-    RISKY: 'glow-risky',
-    DANGER: 'glow-danger'
+    'UNICORN': 'glow-elite',
+    'KEEP AN EYE': 'glow-trusted',
+    'POTENTIAL': 'glow-potential',
+    'MEH+': 'glow-neutral',
+    'MEH': 'glow-meh',
+    'RISKY': 'glow-risky',
+    'DANGER': 'glow-danger'
   };
 
   // Dev trust label based on tier
   const getTierLabel = (tier) => {
-    if (tier === 'ELITE' || tier === 'TRUSTED') return 'dev trusted';
-    if (tier === 'NEUTRAL') return 'dev neutral';
+    if (tier === 'UNICORN') return 'unicorn dev';
+    if (tier === 'KEEP AN EYE') return 'keep an eye';
+    if (tier === 'POTENTIAL') return 'has potential';
+    if (tier === 'MEH+' || tier === 'MEH') return 'meh';
     return 'dev not trusted';
   };
 
@@ -813,11 +821,13 @@ function RecentChecks({ leaderboard, onTokenClick, currentToken }) {
   const [copiedAddress, setCopiedAddress] = useState(null);
 
   const tierColor = {
-    ELITE: 'var(--color-elite)',
-    TRUSTED: 'var(--color-trusted)',
-    NEUTRAL: 'var(--color-neutral)',
-    RISKY: 'var(--color-risky)',
-    DANGER: 'var(--color-danger)'
+    'UNICORN': 'var(--color-elite)',
+    'KEEP AN EYE': 'var(--color-trusted)',
+    'POTENTIAL': 'var(--color-potential)',
+    'MEH+': 'var(--color-neutral)',
+    'MEH': 'var(--color-meh)',
+    'RISKY': 'var(--color-risky)',
+    'DANGER': 'var(--color-danger)'
   };
 
   const truncateAddress = (addr) => {

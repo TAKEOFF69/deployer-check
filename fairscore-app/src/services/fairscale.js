@@ -64,30 +64,36 @@ function getMockFairScore(walletAddress) {
 
 export function getTierFromScore(score) {
   if (score >= 700) return 'UNICORN';
-  if (score >= 400) return 'KINDA OK';
-  if (score >= 350) return 'MEH';
+  if (score >= 600) return 'KEEP AN EYE';
+  if (score >= 500) return 'POTENTIAL';
+  if (score >= 400) return 'MEH+';
+  if (score >= 300) return 'MEH';
   if (score >= 200) return 'RISKY';
   return 'DANGER';
 }
 
 export function getTierColor(tier) {
   const colors = {
-    ELITE: '#00ff88',
-    TRUSTED: '#4dabf7',
-    NEUTRAL: '#ffd93d',
-    RISKY: '#ff8c42',
-    DANGER: '#ff4757'
+    'UNICORN': '#00ff88',
+    'KEEP AN EYE': '#4dabf7',
+    'POTENTIAL': '#a855f7',
+    'MEH+': '#ffd93d',
+    'MEH': '#fbbf24',
+    'RISKY': '#ff8c42',
+    'DANGER': '#ff4757'
   };
-  return colors[tier] || colors.NEUTRAL;
+  return colors[tier] || colors.MEH;
 }
 
 export function getTierGlowClass(tier) {
   const glowClasses = {
-    ELITE: 'glow-green',
-    TRUSTED: 'glow-blue',
-    NEUTRAL: 'glow-yellow',
-    RISKY: 'glow-orange',
-    DANGER: 'glow-red'
+    'UNICORN': 'glow-green',
+    'KEEP AN EYE': 'glow-blue',
+    'POTENTIAL': 'glow-purple',
+    'MEH+': 'glow-yellow',
+    'MEH': 'glow-yellow',
+    'RISKY': 'glow-orange',
+    'DANGER': 'glow-red'
   };
-  return glowClasses[tier] || glowClasses.NEUTRAL;
+  return glowClasses[tier] || glowClasses.MEH;
 }
