@@ -62,10 +62,13 @@ function App() {
     }
   }, [screen]);
 
-  const checkToken = async () => {
-    const cleanedTwitter = cleanTwitterHandle(devTwitter);
+  const checkToken = async (overrideTokenCA = null, overrideTwitter = null) => {
+    // Use override values if provided (for clicking past searches), otherwise use state
+    const tokenToCheck = overrideTokenCA || tokenCA;
+    const twitterToCheck = overrideTwitter !== null ? overrideTwitter : devTwitter;
+    const cleanedTwitter = cleanTwitterHandle(twitterToCheck);
 
-    if (!isValidSolanaAddress(tokenCA)) {
+    if (!isValidSolanaAddress(tokenToCheck)) {
       setError('ngmi - invalid address');
       return;
     }
@@ -74,7 +77,7 @@ function App() {
     setScreen('loading');
 
     try {
-      const tokenReport = await getTokenReport(tokenCA);
+      const tokenReport = await getTokenReport(tokenToCheck);
 
       if (!tokenReport) {
         setError('token not found ser');
@@ -90,7 +93,7 @@ function App() {
       }
 
       // Find the real deployer (handles pump.fun tokens where creator is mint authority)
-      const deployerWallet = await findRealDeployer(tokenCA, reportedCreator);
+      const deployerWallet = await findRealDeployer(tokenToCheck, reportedCreator);
       console.log('Real deployer:', deployerWallet, '(reported:', reportedCreator, ')');
 
       // Get creator tokens from rugcheck initially (will be augmented after we get funder info)
@@ -157,12 +160,12 @@ function App() {
       // Now that we have fundedBy, fetch creator tokens from BOTH deployer AND funder
       if (rugcheckCreatorTokens.length === 0) {
         // Get tokens from deployer
-        const deployerTokens = await getDeployerCreatedTokens(deployerWallet, tokenCA);
+        const deployerTokens = await getDeployerCreatedTokens(deployerWallet, tokenToCheck);
 
         // Get tokens from funder too (if different from deployer)
         let funderTokens = [];
         if (fundedBy && fundedBy !== deployerWallet) {
-          funderTokens = await getDeployerCreatedTokens(fundedBy, tokenCA);
+          funderTokens = await getDeployerCreatedTokens(fundedBy, tokenToCheck);
         }
 
         // Merge both (avoid duplicates)
@@ -208,7 +211,7 @@ function App() {
       console.log('=== SETTING RESULT ===');
       console.log('fundedBy before result:', fundedBy);
       const result = {
-        tokenAddress: tokenCA,
+        tokenAddress: tokenToCheck,
         deployerWallet,
         twitterHandle: cleanedTwitter,
         fairScore: score,
@@ -237,8 +240,8 @@ function App() {
       setCurrentResult(result);
 
       const leaderboardEntry = {
-        id: tokenCA,
-        tokenAddress: tokenCA,
+        id: tokenToCheck,
+        tokenAddress: tokenToCheck,
         deployerWallet,
         tokenName: result.tokenName,
         fairScore: result.fairScore,
@@ -284,9 +287,11 @@ function App() {
   };
 
   const handleTokenClick = (entry) => {
+    // Update state for display
     setTokenCA(entry.tokenAddress);
     setDevTwitter(entry.twitterHandle || '');
-    checkToken();
+    // Pass values directly to checkToken to avoid async state issues
+    checkToken(entry.tokenAddress, entry.twitterHandle || '');
   };
 
   return (
