@@ -389,6 +389,9 @@ function LandingScreen({ tokenCA, setTokenCA, devTwitter, setDevTwitter, onSubmi
             >
               <span>VERIFY!</span>
             </button>
+            <p className="text-center text-[var(--color-text-tertiary)] text-[10px] mt-3">
+              may take up to 1 minute
+            </p>
           </form>
         </div>
 
